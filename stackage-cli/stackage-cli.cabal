@@ -23,6 +23,9 @@ library
     , optparse-applicative
     , process
     , transformers
+    , split
+    , filepath
+    , directory
   default-language:    Haskell2010
 
 executable stackage
@@ -30,6 +33,7 @@ executable stackage
   main-is:             Main.hs
   build-depends:
       base >=4.7 && <4.8
+    , text
     , stackage-cli
 
 executable stk
@@ -37,4 +41,5 @@ executable stk
   main-is:             Main.hs
   build-depends:
       base >=4.7 && <4.8
+    , text
     , stackage-cli

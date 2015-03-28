@@ -1,5 +1,6 @@
 module Main where
 
+import qualified Data.Text.IO as T
 import Stackage.CLI
 import Control.Applicative
 
@@ -12,5 +13,5 @@ main = do
     "Does stackage stuff" -- program description
     (pure ())             -- global parser
     subcommands
-  callModule m args
+  callModule m args >>= T.putStrLn
   return ()
