@@ -2,16 +2,19 @@
 
 module Stackage.CLI
   ( stackageModule
-  , stackageSubmodule
 
-  -- from Module
+  -- * Discovering and calling plugins (modules)
   , Module
+  , ModuleName
   , discoverSubmodulesOf
-  , callModule
-  , Subcommand (..)
-  , subcommandsFor
+  , lookupSubmoduleOf
+  , procModule
+  , readProcModule
 
-  -- from SimpleOptions
+  -- * Defining a plugin
+  , submoduleOf
+  , Subcommand (..)
+  , subcommandsOf
   , simpleCommand
   , simpleOptions
   ) where
@@ -19,6 +22,14 @@ module Stackage.CLI
 import Module
 import SimpleOptions
 
+-- | A reference to the stackage executable.
+--
+-- * You can use this to run the stackage executable via
+--   `callModule stackageModule`.
+-- * You can dynamically discover available plugins via
+--   `discoverSubmodulesOf stackageModule`.
+-- * You can verify the existence of a particular stackage plugin via
+--   `lookupSubmoduleOf stackageModule`.
 stackageModule :: Module
 stackageModule = theModuleNamed "stackage"
 

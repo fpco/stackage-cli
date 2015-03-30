@@ -2,8 +2,10 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Module.IO
-  ( callModule
+  ( procModule
+  , readProcModule
   , discoverSubmodulesOf
+  , lookupSubmoduleOf
   , moduleProcessName
   ) where
 
@@ -20,7 +22,7 @@ import Data.List.Split (splitOn)
 import Data.Text (Text, pack, unpack)
 import Data.Monoid
 import System.Directory
-import System.Process (readProcess)
+import System.Process (CreateProcess, proc, readProcess)
 import System.FilePath ((</>))
 import System.Environment (getEnv)
 
@@ -36,10 +38,29 @@ moduleProcessName m = contextName <> moduleName m where
 moduleProcessFilePath :: Module -> FilePath
 moduleProcessFilePath = unpack . moduleProcessName
 
-callModule :: Module -> [Text] -> IO Text
-callModule m args =
-  pack <$> readProcess (moduleProcessFilePath m) (map unpack args) ""
+-- | Runs a module with the given arguments.
+--
+-- * The process is given an empty stdin.
+-- * The process's stdout is captured and returned as Text when it terminates.
+-- * The process's stderr is passed through.
+readProcModule :: Module -> [Text] -> IO Text
+readProcModule m args =
+    pack <$> readProcess (moduleProcessFilePath m) (map unpack args) ""
 
+-- | Describes how to create a process out of a module and arguments.
+-- You may use "Data.Process" and "Data.Conduit.Process" and "Data.Process"
+-- to manage the process's stdin/stdout/stderr in various ways.
+procModule :: Module -> [Text] -> CreateProcess
+procModule m args = proc (moduleProcessFilePath m) (map unpack args)
+
+-- | Search for a particular plugin on the PATH.
+lookupSubmoduleOf :: Module -> ModuleName -> IO (Maybe Module)
+lookupSubmoduleOf m name
+  = discoverSubmodulesOf m
+ $$ CL.filter ((== name) . moduleName)
+ =$ CL.head
+
+-- | Find the plugins for a given module by inspecting everything on the PATH.
 discoverSubmodulesOf :: Module -> Producer IO Module
 discoverSubmodulesOf m
   = evalStateC []

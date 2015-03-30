@@ -17,7 +17,7 @@ simpleOptions versionString h pd globalParser commands = do
     let config = (,) <$> globalParser <*> subparser commands
     execParser $ info (helpOption <*> versionOption <*> summaryOption <*> config) desc
   where
-    desc = fullDesc <> header h <> progDesc pd
+    desc = fullDesc <> header h <> progDesc pd <> noIntersperse
     helpOption =
         abortOption ShowHelpText $
         long "help" <>
