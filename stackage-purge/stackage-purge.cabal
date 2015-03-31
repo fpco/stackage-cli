@@ -1,7 +1,6 @@
 name:                stackage-purge
 version:             0.1
 synopsis:            Purges stackage stuff
-license-file:        LICENSE
 author:              Dan Burton
 maintainer:          danburton.email@gmail.com
 build-type:          Simple
