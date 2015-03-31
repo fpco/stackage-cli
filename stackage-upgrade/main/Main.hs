@@ -13,7 +13,7 @@ import System.Environment (getArgs)
 import System.Exit (ExitCode (..))
 import System.Process (CreateProcess, createProcess, waitForProcess)
 
--- TODO: move to stackage-cli
+-- TODO: move some of this to stackage-cli
 data StackagePluginException
   = StackagePluginUnavailable Text
   | StackagePluginExitFailure Int
@@ -46,8 +46,8 @@ summary = "Upgrade stackage stuff"
 main = do
   args <- getArgs
   case args of
-    [] -> do
-      runStackagePlugin "purge" []
-      runStackagePlugin "init" $ map pack args
     ["--version"] -> putStrLn version
     ["--summary"] -> putStrLn summary
+    _ -> do
+      runStackagePlugin "purge" []
+      runStackagePlugin "init" $ map pack args

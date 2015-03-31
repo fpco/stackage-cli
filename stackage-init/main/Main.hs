@@ -11,6 +11,7 @@ import Data.Monoid
 import Network.HTTP.Client
 import qualified Data.ByteString.Lazy as LBS
 import System.Exit (exitFailure)
+import System.Environment (getArgs)
 
 type Target = String
 
@@ -52,6 +53,15 @@ progDesc :: String
 progDesc = header
 
 main = do
+  args <- getArgs
+  case args of
+    ["--version"] -> putStrLn version
+    ["--summary"] -> putStrLn header
+    [] -> initTarget "lts"
+    [t] -> initTarget t
+
+-- TODO: use simpleOptions as below
+main2 = do
   (target, ()) <- simpleOptions
     version
     header
