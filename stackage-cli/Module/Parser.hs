@@ -41,7 +41,7 @@ moduleParser m = do
   -- I wish optparse-applicative had a better way to do this
   -- that could avoid unfortunate name clashes.
   allArgs <- liftIO $ map pack <$> getArgs
-  let args = dropWhile (/= moduleName m) allArgs
+  let args = drop 1 $ dropWhile (/= moduleName m) allArgs
 
   -- Try to get a summary, yield a command if we get one.
   mSummary <- liftIO $ getSummary m

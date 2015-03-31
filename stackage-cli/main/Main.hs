@@ -13,6 +13,4 @@ main = do
     "Does stackage stuff" -- program description
     (pure ())             -- global parser
     subcommands
-  -- TODO: a better calling pattern
-  readProcModule m args >>= T.putStrLn
-  return ()
+  execModule m args

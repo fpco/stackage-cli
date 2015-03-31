@@ -141,9 +141,9 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    []            -> purge (PurgeOpts Prompt)
-    ["--force"]   -> purge (PurgeOpts Force)
     ["--summary"] -> putStrLn header
+    ["--force"]   -> purge (PurgeOpts Force)
+    _             -> print args >> purge (PurgeOpts Prompt)
 
 main2 = do
   (opts, ()) <- simpleOptions
