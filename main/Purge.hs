@@ -129,15 +129,6 @@ header = "Purge stackage junk"
 progDesc :: String
 progDesc = header
 
--- TODO: use simpleOptions main below
---main :: IO ()
---main = do
---  args <- getArgs
---  case args of
---    ["--summary"] -> putStrLn header
---    ["--force"]   -> purge (PurgeOpts Force)
---    _             -> print args >> purge (PurgeOpts Prompt)
-
 main = do
   (opts, ()) <- simpleOptions
     version
