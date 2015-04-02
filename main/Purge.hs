@@ -7,7 +7,7 @@ import Filesystem
 import Control.Monad
 import Control.Applicative
 import Data.Monoid
-import Options.Applicative (Parser)
+import Options.Applicative (Parser, flag, long, help)
 import System.Process (readProcess)
 import Data.Char (toLower)
 import System.IO (stdout, hFlush)
@@ -114,8 +114,10 @@ purge opts = do
         when shouldUnregister $ unregisterPackages packageDb packages
 
 purgeOptsParser :: Parser PurgeOpts
-purgeOptsParser = pure todoPurgeOpts where
-  todoPurgeOpts = PurgeOpts Prompt
+purgeOptsParser = PurgeOpts <$> forceOpt where
+  forceOpt = flag Prompt Force mods
+  mods = long "force"
+      <> help "Purge all packages without prompt"
 
 
 version :: String
@@ -128,15 +130,15 @@ progDesc :: String
 progDesc = header
 
 -- TODO: use simpleOptions main below
-main :: IO ()
-main = do
-  args <- getArgs
-  case args of
-    ["--summary"] -> putStrLn header
-    ["--force"]   -> purge (PurgeOpts Force)
-    _             -> print args >> purge (PurgeOpts Prompt)
+--main :: IO ()
+--main = do
+--  args <- getArgs
+--  case args of
+--    ["--summary"] -> putStrLn header
+--    ["--force"]   -> purge (PurgeOpts Force)
+--    _             -> print args >> purge (PurgeOpts Prompt)
 
-main2 = do
+main = do
   (opts, ()) <- simpleOptions
     version
     header
