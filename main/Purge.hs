@@ -15,6 +15,9 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text as T
 import System.Environment (getArgs)
 
+import Text.Parsec hiding ((<|>), many)
+type ParsecParser = Parsec String ()
+
 data Force = Prompt | Force
 data PurgeOpts = PurgeOpts
   { purgeOptsForce :: Force }
@@ -40,10 +43,7 @@ unregisterPackages packageDb = mapM_ unregister where
     [ "unregister"
     , package
     , "--force"
-    , "--no-user-package-db"
-    , "--package-db"
-    , packageDb
-    ]
+    ] <> dbToArgs (Just packageDb)
 
 parsePackageDb :: IO (Maybe String)
 parsePackageDb = do
@@ -56,21 +56,51 @@ parsePackageDb = do
     else
       return Nothing
 
+dbToArgs :: Maybe String -> [String]
+dbToArgs Nothing = []
+dbToArgs (Just packageDb) =
+  [ "--package-db"
+  , packageDb
+  ]
+
 getGlobalPackageDb :: IO (Maybe String)
 getGlobalPackageDb = do
   let fakePackage = "asdklfjasdklfajsdlkghaiwojgadjfkq"
   output <- readProcess "ghc-pkg" ["list", fakePackage] ""
-  return $ listToMaybe (lines output)
+  return $ fmap init $ listToMaybe (lines output)
+  -- fmap init is to get rid of the trailing colon
 
-getPackages :: String -> IO [String]
-getPackages packageDb = words <$> readProcess "ghc-pkg" args "" where
-  args =
-    [ "list"
-    , "--simple-output"
-    , "--no-user-package-db"
-    , "--package-db"
-    , packageDb
-    ]
+                   -- db, packages
+type PackageGroup = (String, [String])
+getPackages :: Maybe String -> IO [PackageGroup]
+getPackages mPackageDb = parsePackages <$> readProcess "ghc-pkg" args "" where
+  args = ["list"] <> dbToArgs mPackageDb
+
+-- TODO: handle exceptions gracefully
+parsePackages :: String -> [PackageGroup]
+parsePackages = either (error . show) id . parse packagesParser ""
+
+ending :: ParsecParser ()
+ending = eof <|> void endOfLine
+
+packagesParser :: ParsecParser [PackageGroup]
+packagesParser = many1 parseGroup
+
+parseGroup :: ParsecParser PackageGroup
+parseGroup = (,) <$> parseDb <*> parseDbPackages <* many endOfLine
+
+parseDb :: ParsecParser String
+parseDb = manyTill anyChar (char ':' *> ending)
+
+parseDbPackages :: ParsecParser [String]
+parseDbPackages = try parseNoPackages <|> many1 parsePackage
+
+parseNoPackages :: ParsecParser [String]
+parseNoPackages = many1 (char ' ') *> string "(no packages)" *> ending *> pure []
+
+parsePackage :: ParsecParser String
+parsePackage = many1 (char ' ') *> manyTill anyChar ending
+
 
 purge :: PurgeOpts -> IO ()
 purge opts = do
@@ -79,46 +109,50 @@ purge opts = do
     removeFile "cabal.config"
 
   globalPackageDbMay <- getGlobalPackageDb
-  whenJust globalPackageDbMay $ \globalPackageDb -> do
-    putStrLn "Detected global package database:"
-    putStrLn globalPackageDb
+  sandboxPackageDbMay <- parsePackageDb
 
-    packageDbMay <- parsePackageDb
-    whenJust packageDbMay $ \packageDb -> do
-      putStrLn "Detected sandbox package database:"
-      putStrLn packageDb
+  let displaySandbox s
+        | Just s == globalPackageDbMay =
+          "(Global) " <> s
+        | Just s == sandboxPackageDbMay =
+          "(Sandbox) " <> s
+        | otherwise = s
 
-      packages <- getPackages packageDb
-      let nPackages = length packages
-      let showNPackages
-             = show nPackages
-            <> " "
-            <> pluralize nPackages "package" "packages"
+  packages <- getPackages sandboxPackageDbMay
+  forM_ packages $ \(db, packages) -> do
+    putStrLn $ displaySandbox db
+    let nPackages = length packages
+    let showNPackages
+           = show nPackages
+          <> " "
+          <> pluralize nPackages "package" "packages"
 
-      when (nPackages > 0 && nPackages < 15) $ mapM_ putStrLn packages
-      putStrLn
-         $ "Detected "
-        <> showNPackages
-        <> " to unregister"
+    putStrLn
+      $ "Detected "
+     <> showNPackages
+     <> " to purge from this database"
 
-      when (nPackages > 0) $ do
-        shouldUnregister <- case purgeOptsForce opts of
-          Force -> return True
-          Prompt -> do
-            line <- prompt
-              $ "Unregister " <> showNPackages <> " (y/n)? [default: n] "
-            case map toLower line of
-              "y"   -> return True
-              "yes" -> return True
-              _   -> return False
-        when shouldUnregister $ unregisterPackages packageDb packages
+    when (nPackages > 0) $ do
+      when (nPackages < 15) $ mapM_ putStrLn packages
+      shouldUnregister <- case purgeOptsForce opts of
+        Force -> do
+          putStrLn $ "(--force) Unregistering " <> showNPackages
+          return True
+        Prompt -> do
+          line <- prompt
+            $ "Unregister " <> showNPackages <> " (y/n)? [default: n] "
+          case map toLower line of
+            "y"   -> return True
+            "yes" -> return True
+            _   -> return False
+      when shouldUnregister $ unregisterPackages db packages
+  return ()
 
 purgeOptsParser :: Parser PurgeOpts
 purgeOptsParser = PurgeOpts <$> forceOpt where
   forceOpt = flag Prompt Force mods
   mods = long "force"
       <> help "Purge all packages without prompt"
-
 
 version :: String
 version = "0.1"
