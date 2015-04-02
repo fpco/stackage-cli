@@ -151,5 +151,5 @@ main2 = do
     header
     progDesc
     purgeOptsParser -- global parser
-    mempty          -- subcommands
+    (Left ())       -- subcommands
   purge opts

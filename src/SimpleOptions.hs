@@ -11,10 +11,10 @@ simpleOptions :: String                          -- ^ version string
               -> String                          -- ^ header
               -> String                          -- ^ program description
               -> Parser a                        -- ^ global settings
-              -> Mod CommandFields b             -- ^ commands
+              -> Either b (Mod CommandFields b)  -- ^ commands
               -> IO (a, b)
-simpleOptions versionString h pd globalParser commands = do
-    let config = (,) <$> globalParser <*> subparser commands
+simpleOptions versionString h pd globalParser mcommands = do
+    let config = (,) <$> globalParser <*> either pure subparser mcommands
     execParser $ info (helpOption <*> versionOption <*> summaryOption <*> config) desc
   where
     desc = fullDesc <> header h <> progDesc pd

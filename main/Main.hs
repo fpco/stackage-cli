@@ -29,4 +29,4 @@ main =
                                 "Run stackage commands"
                                 "Run stackage commands"
                                 (pure ())
-                                desc)
+                                (Right desc))

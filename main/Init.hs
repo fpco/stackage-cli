@@ -3,6 +3,7 @@
 module Main where
 
 import Filesystem
+import Control.Applicative
 import Control.Monad
 import Stackage.CLI.Init
 import Options.Applicative (Parser)
@@ -17,7 +18,7 @@ type Target = String
 
 targetParser :: Parser Target
 targetParser = strArgument mods where
-  mods = metavar "SNAPSHOT" <> value "lts"
+  mods = (metavar "SNAPSHOT" <> value "lts")
 
 isValidTarget :: Target -> IO Bool
 isValidTarget "lts" = return True
@@ -58,5 +59,5 @@ main = do
     header
     progDesc
     targetParser -- global parser
-    mempty       -- subcommands
+    (Left ())    -- subcommands
   initTarget target
