@@ -15,6 +15,9 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict (StateT, get, put)
 import Data.Conduit
+import Data.Hashable (Hashable)
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as HashSet
 import qualified Data.Conduit.List as CL
 import Data.Conduit.Lift (evalStateC)
 import qualified Data.List as L
@@ -63,10 +66,10 @@ lookupSubmoduleOf m name
 -- | Find the plugins for a given module by inspecting everything on the PATH.
 discoverSubmodulesOf :: Module -> Producer IO Module
 discoverSubmodulesOf m
-  = evalStateC []
-  $ getPathDirs
+  = getPathDirs
+ $= clNub -- unique dirs on path
  $= awaitForever (executablesPrefixed $ moduleProcessFilePath m <> "-")
- $= clNub
+ $= clNub -- unique executables
  $= CL.map (submoduleOf m . pack)
 
 executablesPrefixed :: (MonadIO m) => FilePath -> FilePath -> Producer m FilePath
@@ -104,9 +107,14 @@ clFilterM pred = awaitForever $ \a -> do
   predPassed <- lift $ pred a
   when predPassed $ yield a
 
-clNub :: (Monad m, Eq a) => Conduit a (StateT [a] m) a
-clNub = awaitForever $ \a -> do
+clNub :: (Monad m, Eq a, Hashable a)
+  => Conduit a m a
+clNub = evalStateC HashSet.empty clNubState
+
+clNubState :: (Monad m, Eq a, Hashable a)
+  => Conduit a (StateT (HashSet a) m) a
+clNubState = awaitForever $ \a -> do
   seen <- lift get
-  unless (a `elem` seen) $ do
-    lift $ put (a:seen)
+  unless (HashSet.member a seen) $ do
+    lift $ put $ HashSet.insert a seen
     yield a
