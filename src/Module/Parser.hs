@@ -31,12 +31,17 @@ subcommandsOf :: Module -> IO (Mod CommandFields Subcommand)
 subcommandsOf m
   = discoverSubmodulesOf m
  $= awaitForever moduleParser
+ $= CL.map (\(name,summary) ->
+              simpleCommand (unpack $ moduleName m)
+                            (unpack summary)
+                            (Subcommand m)
+                            (givenArgsParser []))
  $$ CL.foldMap id
 
-
-moduleParser :: Module -> Producer IO (Mod CommandFields Subcommand)
+-- | Produce module-summary pairs.
+moduleParser :: Module -> Producer IO (ModuleName,Text)
 moduleParser m = do
-  -- Don't process the rest of the arguments
+  -- Dont process the rest of the arguments
   -- if we're dispatching to this submodule.
   -- I wish optparse-applicative had a better way to do this
   -- that could avoid unfortunate name clashes.
@@ -48,11 +53,7 @@ moduleParser m = do
   case mSummary of
     Nothing -> return ()
     Just summary ->
-      yield $ simpleCommand
-        (unpack $ moduleName m)
-        (unpack summary)
-        (Subcommand m)
-        (givenArgsParser args)
+      yield ((moduleName m),(summary))
 
 getSummary :: Module -> IO (Maybe Text)
 getSummary m = (Just <$> readProcModule m ["--summary"])
