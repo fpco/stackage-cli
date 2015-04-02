@@ -33,9 +33,9 @@ subcommandsOf m
   = discoverSubmodulesOf m
  $= awaitForever moduleParser
  $= CL.map (\(name,summary) ->
-              simpleCommand (unpack $ moduleName m)
+              simpleCommand (unpack name)
                             (unpack summary)
-                            (Subcommand m)
+                            (Subcommand (submoduleOf m name))
                             (givenArgsParser []))
  $$ CL.foldMap id
 
@@ -50,13 +50,6 @@ getSubcommands m
 -- | Produce module-summary pairs.
 moduleParser :: Module -> Producer IO (ModuleName,Text)
 moduleParser m = do
-  -- Dont process the rest of the arguments
-  -- if we're dispatching to this submodule.
-  -- I wish optparse-applicative had a better way to do this
-  -- that could avoid unfortunate name clashes.
-  allArgs <- liftIO $ map pack <$> getArgs
-  let args = drop 1 $ dropWhile (/= moduleName m) allArgs
-
   -- Try to get a summary, yield a command if we get one.
   mSummary <- liftIO $ getSummary m
   case mSummary of
