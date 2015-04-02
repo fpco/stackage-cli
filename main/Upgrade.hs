@@ -3,8 +3,16 @@ module Main where
 
 import Data.Text (Text, pack)
 
+import Control.Applicative
 import Stackage.CLI
 import System.Environment (getArgs)
+import Data.Monoid
+import Options.Applicative (long, short, help, metavar, value, switch, Parser, strArgument)
+
+data Opts = Opts
+  { purgeArgs :: [Text]
+  , initArgs :: [Text]
+  }
 
 
 version :: String
@@ -13,13 +21,43 @@ version = "0.1"
 summary :: String
 summary = "Upgrade stackage stuff"
 
--- TODO: no-op if at latest already
--- TODO: use simpleOpts
+header :: String
+header = summary
+
+progDesc :: String
+progDesc = summary
+
+optsParser :: Parser Opts
+optsParser = Opts <$> purgeArgsParser <*> initArgsParser
+
+initArgsParser :: Parser [Text]
+initArgsParser = targetToArgs  <$> initOptsParser where
+  targetToArgs t = [pack t]
+
+-- As seen in Init.hs
+initOptsParser :: Parser String
+initOptsParser = strArgument mods where
+  mods = metavar "SNAPSHOT" <> value "lts"
+
+purgeArgsParser :: Parser [Text]
+purgeArgsParser = forceToArgs <$> purgeOptsParser where
+  forceToArgs force = if force then ["--force"] else []
+
+-- As seen in Purge.hs
+purgeOptsParser :: Parser Bool
+purgeOptsParser = switch mods where
+  mods = long "force"
+      <> help "Purge all packages without prompt"
+
+
+-- TODO: no-op if at desired target already
 main = do
-  args <- getArgs
-  case args of
-    ["--version"] -> putStrLn version
-    ["--summary"] -> putStrLn summary
-    _ -> do
-      runStackagePlugin "purge" []
-      runStackagePlugin "init" $ map pack args
+  (opts, ()) <- simpleOptions
+    version
+    header
+    progDesc
+    optsParser   -- global parser
+    (Left ())    -- subcommands
+
+  runStackagePlugin "purge" (purgeArgs opts)
+  runStackagePlugin "init" (initArgs opts)
