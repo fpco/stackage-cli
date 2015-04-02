@@ -39,6 +39,7 @@ executable stackage
       base >=4.7 && <4.8
     , text
     , stackage-cli
+  default-language:    Haskell2010
 
 executable stk
   hs-source-dirs:      main
@@ -47,6 +48,7 @@ executable stk
       base >=4.7 && <4.8
     , text
     , stackage-cli
+  default-language:    Haskell2010
 
 executable stackage-init
   hs-source-dirs:      main
@@ -59,6 +61,7 @@ executable stackage-init
     , optparse-applicative
     , http-client
     , bytestring
+  default-language:    Haskell2010
 
 executable stackage-purge
   hs-source-dirs:      main
@@ -70,6 +73,7 @@ executable stackage-purge
     , system-fileio
     , optparse-applicative
     , process
+  default-language:    Haskell2010
 
 executable stackage-upgrade
   hs-source-dirs:      main
@@ -80,3 +84,4 @@ executable stackage-upgrade
     , stackage-cli
     , system-fileio
     , optparse-applicative
+  default-language:    Haskell2010
