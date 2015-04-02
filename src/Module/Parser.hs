@@ -5,6 +5,7 @@
 module Module.Parser
   ( Subcommand (..)
   , subcommandsOf
+  , getSubcommands
   ) where
 
 
@@ -37,6 +38,14 @@ subcommandsOf m
                             (Subcommand m)
                             (givenArgsParser []))
  $$ CL.foldMap id
+
+-- | Get commands for the given module.
+getSubcommands :: Module                 -- ^ Parent module.
+               -> IO [(ModuleName,Text)] -- ^ Command name and summary.
+getSubcommands m
+  = discoverSubmodulesOf m
+ $= awaitForever moduleParser
+ $$ CL.consume
 
 -- | Produce module-summary pairs.
 moduleParser :: Module -> Producer IO (ModuleName,Text)

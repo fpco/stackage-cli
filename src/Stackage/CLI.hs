@@ -7,7 +7,7 @@ module Stackage.CLI
   -- * Discovering and calling plugins (modules)
   , runStackagePlugin
 
-  , Module
+  , Module(..)
   , ModuleName
   , discoverSubmodulesOf
   , lookupSubmoduleOf
@@ -21,6 +21,7 @@ module Stackage.CLI
   , subcommandsOf
   , simpleCommand
   , simpleOptions
+  , getSubcommands
   ) where
 
 import Module
@@ -63,7 +64,7 @@ execModule m args = do
     ExitSuccess -> return ()
 
 -- | Runs a stackage plugin with the given arguments.
--- 
+--
 -- Sample usage:
 -- > main = runStackagePlugin "init" ["nightly"]
 runStackagePlugin
