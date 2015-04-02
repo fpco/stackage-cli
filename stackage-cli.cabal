@@ -30,6 +30,8 @@ library
     , split
     , filepath
     , directory
+    , hashable
+    , unordered-containers
   default-language:    Haskell2010
 
 executable stackage

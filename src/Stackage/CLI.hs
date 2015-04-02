@@ -6,8 +6,9 @@ module Stackage.CLI
 
   -- * Discovering and calling plugins (modules)
   , runStackagePlugin
+  , StackagePluginException (..)
 
-  , Module(..)
+  , Module
   , ModuleName
   , discoverSubmodulesOf
   , lookupSubmoduleOf
@@ -51,7 +52,7 @@ stackageSubmodule = submoduleOf stackageModule
 -- | Things that can go wrong when running a plugin.
 data StackagePluginException
   = StackagePluginUnavailable Text
-  | StackagePluginExitFailure Int
+  | StackagePluginExitFailure Text Int
   deriving (Show, Typeable)
 instance Exception StackagePluginException
 
@@ -60,7 +61,7 @@ execModule m args = do
   (_, _, _, p) <- createProcess $ procModule m args
   e <- waitForProcess p
   case e of
-    ExitFailure i -> throwIO $ StackagePluginExitFailure i
+    ExitFailure i -> throwIO $ StackagePluginExitFailure (moduleName m) i
     ExitSuccess -> return ()
 
 -- | Runs a stackage plugin with the given arguments.
