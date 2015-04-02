@@ -10,9 +10,11 @@ import Options.Applicative (Parser)
 import Options.Applicative.Builder (strArgument, metavar, value)
 import Data.Monoid
 import Network.HTTP.Client
+import Network.HTTP.Types.Status (statusCode)
 import qualified Data.ByteString.Lazy as LBS
 import System.Exit (exitFailure)
 import System.Environment (getArgs)
+import Control.Exception
 
 type Target = String
 
@@ -20,29 +22,31 @@ targetParser :: Parser Target
 targetParser = strArgument mods where
   mods = (metavar "SNAPSHOT" <> value "lts")
 
-isValidTarget :: Target -> IO Bool
-isValidTarget "lts" = return True
-isValidTarget _ = return False
+toUrl :: Target -> String
+toUrl t = "http://stackage.org/" <> t <> "/cabal.config"
+
+downloadTarget :: Target -> IO LBS.ByteString
+downloadTarget target = withManager defaultManagerSettings $ \manager -> do
+  let url = toUrl target
+  req <- parseUrl url
+  let getResponseLbs = do
+        response <- httpLbs req manager
+        return $ responseBody response
+  let handle404 (StatusCodeException s _ _)
+        | statusCode s == 404 = do
+            putStrLn $ "Invalid target: " <> target
+            exitFailure
+      handle404 e = throwIO e
+  getResponseLbs `catch` handle404
 
 initTarget :: Target -> IO ()
-initTarget t = do
-  validTarget <- isValidTarget t
-  unless validTarget $ do
-    putStrLn $ "Invalid target: " <> t
-    exitFailure
-
+initTarget target = do
   configExists <- isFile "cabal.config"
   when configExists $ do
     putStrLn $ "Warning: cabal.config already exists"
     putStrLn $ "No action taken"
     exitFailure
-
-  withManager defaultManagerSettings $ \manager -> do
-    req <- parseUrl "http://stackage.org/lts/cabal.config"
-    response <- httpLbs req manager
-    let lbs = responseBody response
-    LBS.writeFile "cabal.config" lbs
-
+  downloadTarget target >>= LBS.writeFile "cabal.config"
 
 version :: String
 version = "0.1"
