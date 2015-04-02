@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Data.Maybe (listToMaybe, mapMaybe)
 import Stackage.CLI.Purge
 import Filesystem
 import Control.Monad
@@ -24,16 +25,6 @@ prompt str = putStr str >> hFlush stdout >> getLine
 whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
 whenJust (Just a) f = f a
 whenJust Nothing _ = return ()
-
-headMay :: [a] -> Maybe a
-headMay (a:_) = Just a
-headMay _ = Nothing
-
-mapMaybe :: (a -> Maybe b) -> [a] -> [b]
-mapMaybe f [] = []
-mapMaybe f (x:xs) = case f x of
-  Just y -> y : mapMaybe f xs
-  Nothing    -> mapMaybe f xs
 
 pluralize :: Int -> a -> a -> a
 pluralize 1 a _ = a
@@ -61,7 +52,7 @@ parsePackageDb = do
     then do
       t <- T.decodeUtf8 <$> Filesystem.readFile "cabal.sandbox.config"
       let packageDbLine = T.stripPrefix "package-db: "
-      return $ fmap T.unpack $ headMay $ mapMaybe packageDbLine $ T.lines t
+      return $ fmap T.unpack $ listToMaybe $ mapMaybe packageDbLine $ T.lines t
     else
       return Nothing
 
@@ -69,7 +60,7 @@ getGlobalPackageDb :: IO (Maybe String)
 getGlobalPackageDb = do
   let fakePackage = "asdklfjasdklfajsdlkghaiwojgadjfkq"
   output <- readProcess "ghc-pkg" ["list", fakePackage] ""
-  return $ headMay (lines output)
+  return $ listToMaybe (lines output)
 
 getPackages :: String -> IO [String]
 getPackages packageDb = words <$> readProcess "ghc-pkg" args "" where
