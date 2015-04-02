@@ -18,9 +18,6 @@ onPluginErr (StackagePluginUnavailable name) = do
   hPutStr stderr $ "Stackage plugin unavailable: " ++ T.unpack name
   exitFailure
 onPluginErr (StackagePluginExitFailure name i) = do
-  hPutStr stderr
-     $ "Stackage plugin " ++ T.unpack name
-    ++ " failed with exit code: " ++ show i
   exitWith (ExitFailure i)
 
 
