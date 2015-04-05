@@ -89,3 +89,15 @@ executable stackage-upgrade
     , system-fileio
     , optparse-applicative
   default-language:    Haskell2010
+
+executable stackage-sandbox
+  hs-source-dirs:      main
+  main-is:             Sandbox.hs
+  build-depends:
+      base >=4.7 && <4.8
+    , text
+    , stackage-cli
+    , system-fileio
+    , system-filepath
+    , optparse-applicative
+  default-language:    Haskell2010
