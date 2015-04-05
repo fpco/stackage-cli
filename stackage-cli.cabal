@@ -100,4 +100,5 @@ executable stackage-sandbox
     , system-fileio
     , system-filepath
     , optparse-applicative
+    , process
   default-language:    Haskell2010

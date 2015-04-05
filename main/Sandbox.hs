@@ -14,6 +14,7 @@ import Options.Applicative hiding (header, progDesc)
 import Stackage.CLI
 import System.Environment (getEnv)
 import System.Exit (exitFailure)
+import System.Process (callProcess, readProcess)
 
 type Snapshot = Text
 data Action
@@ -38,23 +39,46 @@ subcommands = mconcat
   -- TODO: other commands
   ]
 
+-- TODO: handle errors gracefully
 cabalSandboxInit :: Path.FilePath -> IO ()
-cabalSandboxInit dir = putStrLn "TODO: cabal sandbox init"
+cabalSandboxInit dir = do
+  dirText <- case toText dir of
+    Left e -> fail $ "Couldn't decode path: " <> T.unpack e
+    Right e -> return e
+  let args =
+        [ "sandbox"
+        , "init"
+        , "--sandbox"
+        , T.unpack dirText
+        ]
+  callProcess "cabal" args
 
--- TODO
+-- precondition: cabal.config exists
+-- TODO: better errors?
 parseConfigSnapshot :: IO Snapshot
-parseConfigSnapshot = return "lts-2.0"
+parseConfigSnapshot = do
+  ls <- T.lines <$> T.readFile "cabal.config"
+  let p = "-- Stackage snapshot from: http://www.stackage.org/snapshot/"
+  case ls of
+    (l:_) -> case T.stripPrefix p l of
+      Just snapshot -> return snapshot
+      Nothing -> fail "cabal.config doesn't look like it's from stackage"
+    _ -> fail "No contents found in cabal.config"
 
--- TODO: be more lenient about this
+-- TODO: a stricter check?
 snapshotEq :: Snapshot -> Snapshot -> Bool
-snapshotEq = (==)
+snapshotEq short full = T.isPrefixOf (T.replace "/" "-" short) full
 
 sandboxVerify :: IO ()
 sandboxVerify = putStrLn "TODO: stackage sandbox verify"
 
--- TODO
+-- TODO: handle errors gracefully
 getGhcVersion :: IO Text
-getGhcVersion = return "ghc-7.8.4"
+getGhcVersion = do
+  output <- readProcess "ghc" ["--version"] ""
+  case words output of
+    [] -> fail "Couldn't determine ghc version"
+    ws -> return $ "ghc-" <> T.pack (last ws)
 
 sandboxInit :: Maybe Snapshot -> IO ()
 sandboxInit msnapshot = do
@@ -64,18 +88,23 @@ sandboxInit msnapshot = do
     putStrLn $ "No action taken"
     exitFailure
 
-  runStackagePlugin "init" (maybeToList msnapshot)
-  -- TODO: catch plugin exceptions
+  cabalConfigExists <- isFile "cabal.config"
+  when (not cabalConfigExists) $ do
+    runStackagePlugin "init" (maybeToList msnapshot)
+    -- TODO: catch plugin exceptions
 
   configSnapshot <- parseConfigSnapshot
   snapshot <- case msnapshot of
     Just s | snapshotEq s configSnapshot -> return configSnapshot
     Just s -> do
       T.putStrLn
-         $ "Warning: given snapshot [" <> s <> "]"
+         $ "Warning: given snapshot [" <> s <> "] "
         <> "doesn't match cabal.config snapshot [" <> configSnapshot <> "]"
+      putStrLn "No action taken"
       exitFailure
     Nothing -> return configSnapshot
+
+  T.putStrLn $ "Initializing at snapshot: " <> snapshot
 
   -- TODO: handle env exceptions
   home <- T.pack <$> getEnv "HOME"
