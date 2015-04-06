@@ -17,9 +17,11 @@ import System.Exit (exitFailure)
 import System.Process (callProcess, readProcess)
 
 type Snapshot = Text
+type Package = Text
 data Action
   = Init (Maybe Snapshot)
   | PackageDb
+  | List (Maybe Package)
   -- TODO: other commands
 
 version :: String
@@ -35,12 +37,20 @@ snapshotParser :: Parser Snapshot
 snapshotParser = T.pack <$> strArgument mods where
   mods = metavar "SNAPSHOT"
 
+ghcPkgListParser :: Parser Package
+ghcPkgListParser = T.pack <$> strArgument mods where
+  mods = metavar "PACKAGE"
+
 packageDbDesc :: String
 packageDbDesc = "Prints '--package-db $db', or prints nothing"
+
+listDesc :: String
+listDesc = "Calls `ghc-pkg list` with the sandbox package-db"
 
 subcommands = mconcat
   [ simpleCommand "init" "Init" Init (optional snapshotParser)
   , simpleCommand "package-db" packageDbDesc (const PackageDb) (pure ())
+  , simpleCommand "list" listDesc List (optional ghcPkgListParser)
   -- TODO: other commands
   ]
 
@@ -142,6 +152,18 @@ getPackageDb = parsePackageDb >>= \mdb -> case mdb of
 printPackageDb :: IO ()
 printPackageDb = getPackageDb >>= T.putStrLn
 
+ghcPkgList :: Maybe Package -> IO ()
+ghcPkgList mPackage = do
+  packageDb <- getPackageDb
+  let args
+        = ["list"]
+       <> case mPackage of
+            Nothing -> []
+            Just package -> [T.unpack package]
+       <> [T.unpack packageDb]
+  callProcess "ghc-pkg" args
+
+
 main = do
   ((), action) <- simpleOptions
     version
@@ -150,6 +172,7 @@ main = do
     (pure ())
     (Right subcommands)
   case action of
-    Init target -> sandboxInit target
+    Init mSnapshot -> sandboxInit mSnapshot
     PackageDb -> printPackageDb
+    List mPackage -> ghcPkgList mPackage
     -- TODO: other commands
