@@ -28,7 +28,7 @@ main =
             (getSubcommands stackageModule)
      args <- fmap (map T.pack) getArgs
      case filter (not .
-                  T.isSuffixOf "-")
+                  T.isPrefixOf "-")
                  args of
        (name:args)
          | elem name subcommands ->
