@@ -22,6 +22,7 @@ data Action
   = Init (Maybe Snapshot)
   | PackageDb
   | List (Maybe Package)
+  | Unregister Package
   -- TODO: other commands
 
 version :: String
@@ -37,8 +38,8 @@ snapshotParser :: Parser Snapshot
 snapshotParser = T.pack <$> strArgument mods where
   mods = metavar "SNAPSHOT"
 
-ghcPkgListParser :: Parser Package
-ghcPkgListParser = T.pack <$> strArgument mods where
+packageParser :: Parser Package
+packageParser = T.pack <$> strArgument mods where
   mods = metavar "PACKAGE"
 
 packageDbDesc :: String
@@ -47,10 +48,14 @@ packageDbDesc = "Prints '--package-db $db', or prints nothing"
 listDesc :: String
 listDesc = "Calls `ghc-pkg list` with the sandbox package-db"
 
+unregisterDesc :: String
+unregisterDesc = "Calls `ghc-pkg unregister PACKAGE with the sandbox package-db"
+
 subcommands = mconcat
   [ simpleCommand "init" "Init" Init (optional snapshotParser)
   , simpleCommand "package-db" packageDbDesc (const PackageDb) (pure ())
-  , simpleCommand "list" listDesc List (optional ghcPkgListParser)
+  , simpleCommand "list" listDesc List (optional packageParser)
+  , simpleCommand "unregister" unregisterDesc Unregister packageParser
   -- TODO: other commands
   ]
 
@@ -163,6 +168,10 @@ ghcPkgList mPackage = do
        <> [T.unpack packageDb]
   callProcess "ghc-pkg" args
 
+ghcPkgUnregister :: Package -> IO ()
+ghcPkgUnregister package = do
+  packageDb <- getPackageDb
+  callProcess "ghc-pkg" ["unregister", T.unpack package, T.unpack packageDb]
 
 main = do
   ((), action) <- simpleOptions
@@ -175,4 +184,5 @@ main = do
     Init mSnapshot -> sandboxInit mSnapshot
     PackageDb -> printPackageDb
     List mPackage -> ghcPkgList mPackage
+    Unregister package -> ghcPkgUnregister package
     -- TODO: other commands
