@@ -5,7 +5,7 @@ module Main where
 import Filesystem
 import Control.Applicative
 import Control.Monad
-import Stackage.CLI.Init
+import Stackage.CLI
 import Options.Applicative (Parser)
 import Options.Applicative.Builder (strArgument, metavar, value)
 import Data.Monoid

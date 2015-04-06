@@ -8,8 +8,6 @@ module Stackage.CLI
   , runStackagePlugin
   , StackagePluginException (..)
 
-  , Module
-  , ModuleName
   , discoverSubmodulesOf
   , lookupSubmoduleOf
   , procModule
@@ -46,9 +44,6 @@ import System.Process (CreateProcess, createProcess, waitForProcess)
 stackageModule :: Module
 stackageModule = theModuleNamed "stackage"
 
-stackageSubmodule :: ModuleName -> Module
-stackageSubmodule = submoduleOf stackageModule
-
 -- | Things that can go wrong when running a plugin.
 data StackagePluginException
   = StackagePluginUnavailable Text
@@ -69,11 +64,11 @@ execModule m args = do
 -- Sample usage:
 -- > main = runStackagePlugin "init" ["nightly"]
 runStackagePlugin
-  :: Text -- | plugin name
-  -> [Text] -- | command-line arguments for the plugin
+  :: Text -- ^ plugin name
+  -> [Text] -- ^ command-line arguments for the plugin
   -> IO ()
 runStackagePlugin name args = do
-  mm <- lookupSubmoduleOf stackageModule name
+  mm <- lookupSubmoduleOf (theModuleNamed "stackage") name
   case mm of
     Just m -> execModule m args
     Nothing -> throwIO $ StackagePluginUnavailable name

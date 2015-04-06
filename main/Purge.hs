@@ -2,7 +2,7 @@
 module Main where
 
 import Data.Maybe (listToMaybe, mapMaybe)
-import Stackage.CLI.Purge
+import Stackage.CLI
 import Filesystem
 import Control.Monad
 import Control.Applicative
