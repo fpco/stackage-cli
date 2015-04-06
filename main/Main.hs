@@ -27,12 +27,10 @@ main =
        fmap (map fst)
             (getSubcommands stackageModule)
      args <- fmap (map T.pack) getArgs
-     case filter (not .
-                  T.isPrefixOf "-")
-                 args of
-       (name:args)
+     case dropWhile (T.isPrefixOf "-") args of
+       (name:args')
          | elem name subcommands ->
-           runStackagePlugin name args `catch` onPluginErr
+           runStackagePlugin name args' `catch` onPluginErr
        _ ->
          do desc <- subcommandsOf stackageModule
             void (simpleOptions "0.1"
