@@ -27,17 +27,22 @@ toUrl t = "http://stackage.org/" <> t <> "/cabal.config"
 
 downloadTarget :: Target -> IO LBS.ByteString
 downloadTarget target = withManager defaultManagerSettings $ \manager -> do
-  let url = toUrl target
-  req <- parseUrl url
-  let getResponseLbs = do
+  let getResponseLbs req = do
         response <- httpLbs req manager
         return $ responseBody response
-  let handle404 (StatusCodeException s _ _)
-        | statusCode s == 404 = do
+  let handle404 firstTry (StatusCodeException s _ _)
+        | statusCode s == 404 = if firstTry
+          then do
+            let url = toUrl $ "snapshot/" <> target
+            req <- parseUrl url
+            getResponseLbs req `catch` handle404 False
+          else do
             putStrLn $ "Invalid target: " <> target
             exitFailure
-      handle404 e = throwIO e
-  getResponseLbs `catch` handle404
+      handle404 _ e = throwIO e
+  let url = toUrl target
+  req <- parseUrl url
+  getResponseLbs req `catch` handle404 True
 
 initTarget :: Target -> IO ()
 initTarget target = do
