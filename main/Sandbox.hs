@@ -19,6 +19,7 @@ import System.Process (callProcess, readProcess)
 type Snapshot = Text
 data Action
   = Init (Maybe Snapshot)
+  | PackageDb
   -- TODO: other commands
 
 version :: String
@@ -34,8 +35,12 @@ snapshotParser :: Parser Snapshot
 snapshotParser = T.pack <$> strArgument mods where
   mods = metavar "SNAPSHOT"
 
+packageDbDesc :: String
+packageDbDesc = "Prints '--package-db $db', or prints nothing"
+
 subcommands = mconcat
   [ simpleCommand "init" "Init" Init (optional snapshotParser)
+  , simpleCommand "package-db" packageDbDesc (const PackageDb) (pure ())
   -- TODO: other commands
   ]
 
@@ -115,6 +120,28 @@ sandboxInit msnapshot = do
   cabalSandboxInit dir
   sandboxVerify
 
+-- copied from Purge.hs, tweaked
+-- TODO: remove duplication
+parsePackageDb :: IO (Maybe Text)
+parsePackageDb = do
+  cabalSandboxConfigExists <- isFile "cabal.sandbox.config"
+  if cabalSandboxConfigExists
+    then do
+      t <- T.readFile "cabal.sandbox.config"
+      let packageDbLine = T.stripPrefix "package-db: "
+      return $ listToMaybe $ mapMaybe packageDbLine $ T.lines t
+    else
+      return Nothing
+
+
+getPackageDb :: IO Text
+getPackageDb = parsePackageDb >>= \mdb -> case mdb of
+  Just packageDb -> return $ "--package-db=" <> packageDb
+  Nothing -> return ""
+
+printPackageDb :: IO ()
+printPackageDb = getPackageDb >>= T.putStrLn
+
 main = do
   ((), action) <- simpleOptions
     version
@@ -124,4 +151,5 @@ main = do
     (Right subcommands)
   case action of
     Init target -> sandboxInit target
+    PackageDb -> printPackageDb
     -- TODO: other commands
