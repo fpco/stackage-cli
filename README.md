@@ -44,8 +44,8 @@ Unlike `stackage purge`, this does not alter any package databases. The shared s
 Replace `cabal.config` and `cabal.sandbox.config` with newer versions and (possibly) a new shared sandbox.
 
 
-Examples
---------
+Example
+-------
 
 Let's say I want to see if I can compile my project against the latest in the LTS 1 series. For the sake of demonstration, let's pretend that `semigroups` is my project. :P
 
@@ -59,7 +59,9 @@ Using an existing sandbox located at
 /home/dan/.stackage/sandboxes/ghc-7.8.4/lts-1.15
 ```
 
-Cool, the latest in the series is lts-1.15, and I've already installed some things in that sandbox before.
+`stackage sandbox init` wrote a `cabal.config` and a `cabal.sandbox.config` for us.
+
+The latest in the lts/1 series is lts-1.15, and I've already installed some things in that sandbox before.
 
 ```
 $ cabal install --only-dependencies
@@ -94,6 +96,25 @@ $ cat cabal.config | grep semigroups
 ```
 
 So if you try to `cabal install` a local project into a shared sandbox, it will work, as long as the local `cabal.config` constraint agrees with the version number found in `yourproject.cabal`. You probably *don't* want to install local modifications into your *shared sandbox*, which is why I recommend using `cabal build` instead of `cabal install` to build your local projects.
+
+Let's go ahead and remove that from our sandbox db.
+
+```
+$ stackage sandbox unregister semigroups
+```
+
+`stackage sandbox unregister` is just a wrapper around `ghc-pkg unregister` that conveniently detects the location of your sandbox package-db and passes it in as an argument for you. You can see what's in the sandbox with `stackage sandbox list`:
+
+```
+$ stackage sandbox list
+/home/dan/.stackage/sandboxes/ghc-7.8.4/lts-1.15/x86_64-linux-ghc-7.8.4-packages.conf.d
+   hashable-1.2.3.2
+   nats-1
+   text-1.2.0.4
+   unordered-containers-0.2.5.1
+```
+
+Again, just a light wrapper around `ghc-pkg`.
 
 Let's see what happens when we try to install an older version of semigroups:
 
@@ -136,4 +157,8 @@ rejecting: semigroups-0.16.2.1 (global constraint requires ==0.16.2.2)
 ...
 ```
 
-It will stop you, because you're trying to install a version of `semigroups` that differs from the constraint in lts-1.15. This is good. We don't want to mess up the shared lts-1.15 sandbox.
+It will stop you, because you're trying to install a version of `semigroups` that differs from the constraint in lts-1.15, which your local `cabal.config` is enforcing for you. This is good. We don't want to mess up the shared lts-1.15 sandbox.
+
+Notice that stackage is allowing us to do something that has traditionally been quite difficult: running a build as though we had rolled back hackage to some point in the past. We can select a stackage snapshot from any point in time, and build stuff against it. Like `cabal freeze`, we can use stackage snapshots as a reference point to share build strategies with other people. Unlike `cabal freeze`, stackage snapshots are predetermined and public. If you and I both develop our projects against the same stackage snapshot, then we can prevent the "cabal butterfly effect".
+
+Sandbox management via `stackage sandbox` extends these benefits of stackage to shared sandboxes. By sharing sandboxes, we can strike a balance between the extremes of installing everything in userspace, and installing everything in a new sandbox for every project. Of course, if you are doing weird stuff with your sandbox for a given project, you might not want to share that sandbox with your other projects. But for projects that you simply want to build against a given stackage snapshot, `stackage sandbox` is for you!
