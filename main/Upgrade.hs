@@ -53,7 +53,7 @@ purgeOptsParser = switch mods where
 
 handlePluginException :: PluginException -> IO ()
 handlePluginException (PluginNotFound _ p) = do
-  hPutStrLn stderr $ "stackage-upgrade: requires plugin stackge " <> unpack p
+  hPutStrLn stderr $ "stackage-upgrade: requires plugin stackage " <> unpack p
   exitFailure
 handlePluginException (PluginExitFailure _ i) = do
   exitWith (ExitFailure i)
