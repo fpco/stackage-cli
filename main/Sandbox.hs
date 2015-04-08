@@ -41,6 +41,7 @@ data SandboxException
   | EmptyCabalConfig
   | DecodePathFail Text
   | ConfigAlreadyExists
+  | InvalidSnapshot Snapshot
   deriving (Show, Typeable)
 instance Exception SandboxException
 
@@ -234,9 +235,16 @@ sandboxDelete = do
   when cabalSandboxConfigExists $ do
     removeFile "cabal.sandbox.config"
 
+snapshotSanityCheck :: Snapshot -> IO ()
+snapshotSanityCheck snapshot =
+  if any (`T.isInfixOf` snapshot) ["..", "/"]
+    then throwIO $ InvalidSnapshot snapshot
+    else return ()
+
 sandboxDeleteSnapshot :: Snapshot -> IO ()
-sandboxDeleteSnapshot snapshot
-  = getSnapshotDir snapshot >>= removeTree
+sandboxDeleteSnapshot snapshot = do
+  snapshotSanityCheck snapshot
+  getSnapshotDir snapshot >>= removeTree
 
 -- Find the canonical name for a snapshot by looking it up on stackage.org.
 -- This can change over time. e.g. "lts" used to mean lts-1.0.
@@ -315,6 +323,9 @@ handleSandboxExceptions EmptyCabalConfig = do
 handleSandboxExceptions (DecodePathFail e) = do
   hPutStrLn stderr $ "Unexpected failure decoding path:"
   T.hPutStrLn stderr e
+  exitFailure
+handleSandboxExceptions (InvalidSnapshot snapshot) = do
+  T.hPutStrLn stderr $ "Invalid snapshot: " <> snapshot
   exitFailure
 
 
