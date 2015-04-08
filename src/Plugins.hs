@@ -2,6 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
+-- | Dynamically look up available executables.
 module Plugins
   ( Plugin
   , pluginPrefix
@@ -113,6 +114,7 @@ toPlugin prefix name = do
     _ -> return ()
 
 
+-- | Things that can go wrong when using `callPlugin`.
 data PluginException
   = PluginNotFound !Plugins !Text
   | PluginExitFailure !Plugin !Int

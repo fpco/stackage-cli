@@ -37,5 +37,5 @@ main = do
         "Run stackage commands"
         "Run stackage commands"
         (pure ())
-        (commandsFromPlugins stackage)
+        (Right $ commandsFromPlugins stackage)
       return ()

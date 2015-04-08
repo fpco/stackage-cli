@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 
+-- | A convenience wrapper around Options.Applicative.
 module SimpleOptions
     ( module SimpleOptions
     , module Options.Applicative
@@ -7,6 +8,8 @@ module SimpleOptions
 
 import           Options.Applicative
 
+-- | Create a simple program options parser that responds to
+-- the `--help`, `--version`, and `--summary` flags.
 simpleOptions :: String                          -- ^ version string
               -> String                          -- ^ header
               -> String                          -- ^ program description
@@ -33,6 +36,7 @@ simpleOptions versionString h pd globalParser mcommands = do
             (long "summary" <>
              help "Show program summary")
 
+-- | Create a simple command for use with `simpleOptions`.
 simpleCommand :: String   -- ^ command string
            -> String   -- ^ title of command
            -> (a -> b) -- ^ constructor to wrap up command in common data type

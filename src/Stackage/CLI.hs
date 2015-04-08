@@ -1,24 +1,27 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Functions for creating and calling Stackage plugins.
 module Stackage.CLI
-  ( Plugin
+  ( -- * Discovering and calling plugins
+    runStackagePlugin
+  , Plugins
+  , findPlugins
+  , callPlugin
+  , PluginException (..)
+
+    -- * Creating your own plugin
+  , simpleCommand
+  , simpleOptions
+  , commandsFromPlugins
+
+    -- * Finer-grained inspection of plugins
+  , listPlugins
+  , lookupPlugin
+  , Plugin
   , pluginPrefix
   , pluginName
   , pluginSummary
   , pluginProc
-
-  , Plugins
-  , findPlugins
-  , listPlugins
-  , lookupPlugin
-  , callPlugin
-  , runStackagePlugin
-
-  , PluginException (..)
-
-  , simpleCommand
-  , simpleOptions
-  , commandsFromPlugins
   ) where
 
 import Data.Text (Text)
