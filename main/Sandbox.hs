@@ -1,20 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Main where
 
-import Control.Exception (bracket_)
+import Control.Exception (Exception, bracket_, catch, throwIO)
 import Control.Monad (when)
 import Data.Maybe
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import Data.Typeable (Typeable)
 import Filesystem.Path.CurrentOS as Path
 import Filesystem
 import Options.Applicative hiding (header, progDesc)
 import Stackage.CLI
 import System.Environment (getEnv)
-import System.Exit (exitFailure, exitSuccess)
+import System.Exit
+import System.IO (hPutStrLn, stderr)
+import System.IO.Error (isDoesNotExistError)
 import System.Process (callProcess, readProcess)
 
 type Snapshot = Text
@@ -26,7 +30,19 @@ data Action
   | Unregister Package
   | Delete (Maybe Snapshot)
   | Upgrade (Maybe Snapshot)
-  -- TODO: other commands
+
+data SandboxException
+  = NoHomeEnvironmentVariable
+  | AlreadyAtSnapshot
+  | PackageDbLocMismatch Text Text
+  | MissingConfig Bool Bool
+  | SnapshotMismatch Text Text
+  | NonStackageCabalConfig
+  | EmptyCabalConfig
+  | DecodePathFail Text
+  | ConfigAlreadyExists
+  deriving (Show, Typeable)
+instance Exception SandboxException
 
 mSnapshotToArgs :: Maybe Snapshot -> [String]
 mSnapshotToArgs = fmap T.unpack . maybeToList
@@ -71,15 +87,13 @@ subcommands = mconcat
   , simpleCommand "unregister" unregisterDesc Unregister packageParser
   , simpleCommand "delete" deleteDesc Delete (optional snapshotParser)
   , simpleCommand "upgrade" upgradeDesc Upgrade (optional snapshotParser)
-  -- TODO: other commands
   ]
 
 toText' :: Path.FilePath -> IO Text
 toText' p = case toText p of
-  Left e -> fail $ "Couldn't decode path: " <> T.unpack e
+  Left e -> throwIO $ DecodePathFail e
   Right t -> return t
 
--- TODO: handle errors gracefully
 cabalSandboxInit :: Path.FilePath -> IO ()
 cabalSandboxInit dir = do
   dirText <- toText' dir
@@ -100,8 +114,8 @@ parseConfigSnapshot = do
   case ls of
     (l:_) -> case T.stripPrefix p l of
       Just snapshot -> return snapshot
-      Nothing -> fail "cabal.config doesn't look like it's from stackage"
-    _ -> fail "No contents found in cabal.config"
+      Nothing -> throwIO NonStackageCabalConfig
+    _ -> throwIO EmptyCabalConfig
 
 -- TODO: a stricter check?
 snapshotEq :: Snapshot -> Snapshot -> Bool
@@ -119,16 +133,9 @@ sandboxVerify = do
       snapshotDir <- getSnapshotDir snapshot
       snapshotDirText <- toText' snapshotDir
       when (not $ T.isPrefixOf snapshotDirText packageDb) $ do
-        putStrLn "verify: package db isn't in the expected location:"
-        T.putStrLn $ "dir: " <> snapshotDirText
-        T.putStrLn $ "db: " <> packageDb
-        exitFailure
+        throwIO $ PackageDbLocMismatch snapshotDirText packageDb
     else do
-      when (not cabalConfigExists) $
-        putStrLn "verify: cabal.config not present"
-      when (not cabalSandboxConfigExists) $
-        putStrLn "verify: cabal.sandbox.config not present"
-      exitFailure
+      throwIO $ MissingConfig cabalConfigExists cabalSandboxConfigExists
 
 -- TODO: handle errors gracefully
 getGhcVersion :: IO Text
@@ -142,24 +149,16 @@ sandboxInit :: Maybe Snapshot -> IO ()
 sandboxInit msnapshot = do
   cabalSandboxConfigExists <- isFile "cabal.sandbox.config"
   when cabalSandboxConfigExists $ do
-    putStrLn $ "Warning: cabal.sandbox.config already exists"
-    putStrLn $ "No action taken"
-    exitFailure
+    throwIO ConfigAlreadyExists
 
   cabalConfigExists <- isFile "cabal.config"
   when (not cabalConfigExists) $ do
     runStackagePlugin "init" (mSnapshotToArgs msnapshot)
-    -- TODO: catch plugin exceptions
 
   configSnapshot <- parseConfigSnapshot
   snapshot <- case msnapshot of
     Just s | snapshotEq s configSnapshot -> return configSnapshot
-    Just s -> do
-      T.putStrLn
-         $ "Warning: given snapshot [" <> s <> "] "
-        <> "doesn't match cabal.config snapshot [" <> configSnapshot <> "]"
-      putStrLn "No action taken"
-      exitFailure
+    Just s -> throwIO $ SnapshotMismatch s configSnapshot
     Nothing -> return configSnapshot
 
   T.putStrLn $ "Initializing at snapshot: " <> snapshot
@@ -169,10 +168,15 @@ sandboxInit msnapshot = do
   cabalSandboxInit dir
   sandboxVerify
 
+getHome :: IO Text
+getHome = T.pack <$> getEnv "HOME" `catch` dne where
+  dne e
+    | isDoesNotExistError e = throwIO NoHomeEnvironmentVariable
+    | otherwise = throwIO e
+
 getSnapshotDir :: Snapshot -> IO Path.FilePath
 getSnapshotDir snapshot = do
-  -- TODO: handle env exceptions
-  home <- T.pack <$> getEnv "HOME"
+  home <- getHome
   ghcVersion <- getGhcVersion
   let dir = Path.fromText home </> ".stackage" </> "sandboxes"
         </> Path.fromText ghcVersion </> Path.fromText snapshot
@@ -268,14 +272,60 @@ sandboxUpgrade mSnapshot = do
     snapshotDirText <- toText' snapshotDir
     if T.isPrefixOf snapshotDirText packageDb
       then do
-        -- TODO: more verification
         T.putStrLn $ "Already at snapshot: " <> snapshot
-        exitSuccess
+        -- TODO: more verification
+        throwIO AlreadyAtSnapshot
       else return ()
 
   sandboxDelete
   sandboxInit mSnapshot
 
+handleSandboxExceptions :: SandboxException -> IO ()
+handleSandboxExceptions NoHomeEnvironmentVariable = do
+  hPutStrLn stderr "Couldn't find the HOME environment variable"
+  exitFailure
+handleSandboxExceptions AlreadyAtSnapshot = exitSuccess
+handleSandboxExceptions (PackageDbLocMismatch dir db) = do
+  hPutStrLn stderr "verify: package db isn't in the expected location:"
+  T.hPutStrLn stderr $ "dir: " <> dir
+  T.hPutStrLn stderr $ "db: " <> db
+  exitFailure
+handleSandboxExceptions (MissingConfig cabalConfigExists cabalSandboxConfigExists) = do
+  when (not cabalConfigExists) $
+    hPutStrLn stderr "verify: cabal.config not present"
+  when (not cabalSandboxConfigExists) $
+    hPutStrLn stderr "verify: cabal.sandbox.config not present"
+  exitFailure
+handleSandboxExceptions (SnapshotMismatch s configSnapshot) = do
+  T.hPutStrLn stderr
+     $ "Warning: given snapshot [" <> s <> "] "
+    <> "doesn't match cabal.config snapshot [" <> configSnapshot <> "]"
+  hPutStrLn stderr "No action taken"
+  exitFailure
+handleSandboxExceptions ConfigAlreadyExists = do
+  hPutStrLn stderr $ "Warning: cabal.sandbox.config already exists"
+  hPutStrLn stderr $ "No action taken"
+  exitFailure
+handleSandboxExceptions NonStackageCabalConfig = do
+  hPutStrLn stderr $ "cabal.config doesn't look like it's from stackage"
+  exitFailure
+handleSandboxExceptions EmptyCabalConfig = do
+  hPutStrLn stderr $ "No contents found in cabal.config"
+  exitFailure
+handleSandboxExceptions (DecodePathFail e) = do
+  hPutStrLn stderr $ "Unexpected failure decoding path:"
+  T.hPutStrLn stderr e
+  exitFailure
+
+
+handlePluginExceptions :: PluginException -> IO ()
+handlePluginExceptions (PluginNotFound _ p) = do
+  hPutStrLn stderr $ "stackage-sandbox: requires plugin stackage " <> T.unpack p
+  exitFailure
+handlePluginExceptions (PluginExitFailure _ i) = do
+  exitWith (ExitFailure i)
+
+main :: IO ()
 main = do
   ((), action) <- simpleOptions
     version
@@ -283,12 +333,14 @@ main = do
     progDesc
     (pure ())
     (Right subcommands)
-  case action of
-    Init mSnapshot -> sandboxInit mSnapshot
-    PackageDb -> printPackageDb
-    List mPackage -> ghcPkgList mPackage
-    Unregister package -> ghcPkgUnregister package
-    Delete mSnapshot -> case mSnapshot of
-      Just snapshot -> sandboxDeleteSnapshot snapshot
-      Nothing -> sandboxDelete
-    Upgrade mSnapshot -> sandboxUpgrade mSnapshot
+  let go = case action of
+        Init mSnapshot -> sandboxInit mSnapshot
+        PackageDb -> printPackageDb
+        List mPackage -> ghcPkgList mPackage
+        Unregister package -> ghcPkgUnregister package
+        Delete mSnapshot -> case mSnapshot of
+          Just snapshot -> sandboxDeleteSnapshot snapshot
+          Nothing -> sandboxDelete
+        Upgrade mSnapshot -> sandboxUpgrade mSnapshot
+  go `catch` handleSandboxExceptions
+     `catch` handlePluginExceptions
