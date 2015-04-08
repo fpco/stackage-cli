@@ -42,6 +42,8 @@ data SandboxException
   | DecodePathFail Text
   | ConfigAlreadyExists
   | InvalidSnapshot Snapshot
+  | GhcVersionFail
+  | PackageDbNotFound
   deriving (Show, Typeable)
 instance Exception SandboxException
 
@@ -143,7 +145,7 @@ getGhcVersion :: IO Text
 getGhcVersion = do
   output <- readProcess "ghc" ["--version"] ""
   case words output of
-    [] -> fail "Couldn't determine ghc version"
+    [] -> throwIO $ GhcVersionFail
     ws -> return $ "ghc-" <> T.pack (last ws)
 
 sandboxInit :: Maybe Snapshot -> IO ()
@@ -175,13 +177,19 @@ getHome = T.pack <$> getEnv "HOME" `catch` dne where
     | isDoesNotExistError e = throwIO NoHomeEnvironmentVariable
     | otherwise = throwIO e
 
-getSnapshotDir :: Snapshot -> IO Path.FilePath
-getSnapshotDir snapshot = do
+getSnapshotDirPrefix :: IO Path.FilePath
+getSnapshotDirPrefix = do
   home <- getHome
   ghcVersion <- getGhcVersion
   let dir = Path.fromText home </> ".stackage" </> "sandboxes"
-        </> Path.fromText ghcVersion </> Path.fromText snapshot
+        </> Path.fromText ghcVersion
   return dir
+
+getSnapshotDir :: Snapshot -> IO Path.FilePath
+getSnapshotDir snapshot = do
+  dir <- getSnapshotDirPrefix
+  return $ dir </> Path.fromText snapshot
+
 
 -- copied from Purge.hs, tweaked
 -- TODO: remove duplication
@@ -199,7 +207,7 @@ parsePackageDb = do
 getPackageDb :: IO Text
 getPackageDb = parsePackageDb >>= \mdb -> case mdb of
   Just packageDb -> return packageDb
-  Nothing -> fail "Couldn't find sandbox package-db"
+  Nothing -> throwIO $ PackageDbNotFound
 
 getPackageDbArg :: IO Text
 getPackageDbArg = parsePackageDb >>= \mdb -> case mdb of
@@ -233,6 +241,7 @@ sandboxDelete = do
     removeFile "cabal.config"
   cabalSandboxConfigExists <- isFile "cabal.sandbox.config"
   when cabalSandboxConfigExists $ do
+    oldSandboxNotice
     removeFile "cabal.sandbox.config"
 
 snapshotSanityCheck :: Snapshot -> IO ()
@@ -288,6 +297,31 @@ sandboxUpgrade mSnapshot = do
   sandboxDelete
   sandboxInit mSnapshot
 
+getSandboxPrefix :: IO Text
+getSandboxPrefix = do
+  dirPath <- getSnapshotDirPrefix
+  toText' dirPath
+
+oldSandboxNotice :: IO ()
+oldSandboxNotice = do
+  db <- getPackageDb
+  sandboxPrefix <- getSandboxPrefix
+  -- TODO: use FilePath functions to do this better
+  case T.stripPrefix (sandboxPrefix <> "/") db of
+    Nothing -> do
+      putStrLn "Notice: Your old sandbox remains intact:"
+      T.putStrLn db
+    Just db' -> case T.takeWhile (not . flip elem "/\\") db' of
+      snapshot | not (T.null snapshot) -> do
+        T.putStrLn $ "Notice: The " <> snapshot <> " shared sandbox remains intact."
+        T.putStrLn $ "You may delete it from your system by calling:"
+        T.putStrLn $ "stackage sandbox delete " <> snapshot
+      _ -> do
+        putStrLn "Notice: Your old sandbox remains untouched:"
+        T.putStrLn db
+  T.putStrLn ""
+
+
 handleSandboxExceptions :: SandboxException -> IO ()
 handleSandboxExceptions NoHomeEnvironmentVariable = do
   hPutStrLn stderr "Couldn't find the HOME environment variable"
@@ -327,7 +361,12 @@ handleSandboxExceptions (DecodePathFail e) = do
 handleSandboxExceptions (InvalidSnapshot snapshot) = do
   T.hPutStrLn stderr $ "Invalid snapshot: " <> snapshot
   exitFailure
-
+handleSandboxExceptions GhcVersionFail = do
+  hPutStrLn stderr $ "Couldn't determine ghc version"
+  exitFailure
+handleSandboxExceptions PackageDbNotFound = do
+  hPutStrLn stderr $ "Couldn't find sandbox package-db"
+  exitFailure
 
 handlePluginExceptions :: PluginException -> IO ()
 handlePluginExceptions (PluginNotFound _ p) = do
