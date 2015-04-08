@@ -2,10 +2,14 @@
 module Main where
 
 import Control.Applicative
+import Control.Exception (catch)
 import Stackage.CLI
 import System.Environment (getArgs)
 import Data.Monoid
+import Data.Text (unpack)
 import Options.Applicative (long, short, help, metavar, value, switch, Parser, strArgument)
+import System.IO (hPutStrLn, stderr)
+import System.Exit (exitFailure, exitWith, ExitCode (..))
 
 data Opts = Opts
   { purgeArgs :: [String]
@@ -47,6 +51,12 @@ purgeOptsParser = switch mods where
   mods = long "force"
       <> help "Purge all packages without prompt"
 
+handlePluginException :: PluginException -> IO ()
+handlePluginException (PluginNotFound _ p) = do
+  hPutStrLn stderr $ "stackage-upgrade: requires plugin stackge " <> unpack p
+  exitFailure
+handlePluginException (PluginExitFailure _ i) = do
+  exitWith (ExitFailure i)
 
 -- TODO: no-op if at desired target already
 main = do
@@ -59,4 +69,6 @@ main = do
 
   stackage <- findPlugins "stackage"
   callPlugin stackage "purge" (purgeArgs opts)
+    `catch` handlePluginException
   callPlugin stackage "init" (initArgs opts)
+    `catch` handlePluginException
