@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Main where
 
@@ -9,49 +10,58 @@ import Stackage.CLI
 import Options.Applicative (Parser)
 import Options.Applicative.Builder (strArgument, metavar, value)
 import Data.Monoid
+import Data.Typeable (Typeable)
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
 import qualified Data.ByteString.Lazy as LBS
 import System.Exit (exitFailure)
 import System.Environment (getArgs)
+import System.IO (hPutStrLn, stderr)
 import Control.Exception
 
-type Target = String
+type Snapshot = String
 
-targetParser :: Parser Target
-targetParser = strArgument mods where
+data InitException
+  = InvalidSnapshot
+  | SnapshotNotFound
+  | UnexpectedHttpException HttpException
+  | CabalConfigExists
+  deriving (Show, Typeable)
+instance Exception InitException
+
+snapshotParser :: Parser Snapshot
+snapshotParser = strArgument mods where
   mods = (metavar "SNAPSHOT" <> value "lts")
 
-toUrl :: Target -> String
+toUrl :: Snapshot -> String
 toUrl t = "http://stackage.org/" <> t <> "/cabal.config"
 
-downloadTarget :: Target -> IO LBS.ByteString
-downloadTarget target = withManager defaultManagerSettings $ \manager -> do
+snapshotReq :: Snapshot -> IO Request
+snapshotReq snapshot = case parseUrl (toUrl snapshot) of
+  Left _ -> throwIO $ InvalidSnapshot
+  Right req -> return req
+
+downloadSnapshot :: Snapshot -> IO LBS.ByteString
+downloadSnapshot snapshot = withManager defaultManagerSettings $ \manager -> do
   let getResponseLbs req = do
         response <- httpLbs req manager
         return $ responseBody response
   let handle404 firstTry (StatusCodeException s _ _)
         | statusCode s == 404 = if firstTry
           then do
-            let url = toUrl $ "snapshot/" <> target
-            req <- parseUrl url
+            req <- snapshotReq snapshot
             getResponseLbs req `catch` handle404 False
           else do
-            putStrLn $ "Invalid target: " <> target
-            exitFailure
-      handle404 _ e = throwIO e
-  let url = toUrl target
-  req <- parseUrl url
+            throwIO $ SnapshotNotFound
+      handle404 _ e = throwIO $ UnexpectedHttpException e
+  req <- snapshotReq snapshot
   getResponseLbs req `catch` handle404 True
 
-initTarget :: Target -> IO ()
-initTarget target = do
+initSnapshot :: Snapshot -> IO ()
+initSnapshot snapshot = do
   configExists <- isFile "cabal.config"
-  when configExists $ do
-    putStrLn $ "Warning: cabal.config already exists"
-    putStrLn $ "No action taken"
-    exitFailure
-  downloadTarget target >>= LBS.writeFile "cabal.config"
+  when configExists $ throwIO $ CabalConfigExists
+  downloadSnapshot snapshot >>= LBS.writeFile "cabal.config"
 
 version :: String
 version = "0.1"
@@ -62,11 +72,24 @@ header = "Initializes cabal.config"
 progDesc :: String
 progDesc = header
 
+handleInitExceptions :: Snapshot -> InitException -> IO ()
+handleInitExceptions snapshot e = hPutStrLn stderr (err e) >> exitFailure where
+  err InvalidSnapshot
+    = "Invalid snapshot: " <> snapshot
+  err SnapshotNotFound
+    = "Snapshot not found: " <> snapshot
+  err CabalConfigExists
+    = "Warning: Cabal config already exists.\n"
+   <> "No action taken."
+  err (UnexpectedHttpException e)
+    = "Unexpected http exception:\n"
+   <> show e
+
 main = do
-  (target, ()) <- simpleOptions
+  (snapshot, ()) <- simpleOptions
     version
     header
     progDesc
-    targetParser -- global parser
+    snapshotParser -- global parser
     (Left ())    -- subcommands
-  initTarget target
+  initSnapshot snapshot `catch` handleInitExceptions snapshot
