@@ -49,7 +49,7 @@ downloadSnapshot snapshot = withManager defaultManagerSettings $ \manager -> do
   let handle404 firstTry (StatusCodeException s _ _)
         | statusCode s == 404 = if firstTry
           then do
-            req <- snapshotReq snapshot
+            req <- snapshotReq $ "snapshot/" <> snapshot
             getResponseLbs req `catch` handle404 False
           else do
             throwIO $ SnapshotNotFound
