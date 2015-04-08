@@ -67,8 +67,8 @@ pluginSummary :: Plugin -> Text
 pluginSummary = _pluginSummary
 
 -- | Describes how to create a process out of a plugin and arguments.
--- You may use "Data.Process" and "Data.Conduit.Process" and "Data.Process"
--- to manage the process's stdin/stdout/stderr in various ways.
+-- You may use Data.Process and Data.Conduit.Process
+-- to manage the process's stdin, stdout, and stderr in various ways.
 pluginProc :: Plugin -> [String] -> CreateProcess
 pluginProc = proc . pluginProcessName
 
@@ -77,11 +77,11 @@ pluginProcessName :: Plugin -> String
 pluginProcessName p = unpack $ pluginPrefix p <> "-" <> pluginName p
 
 
+-- | Represents the plugins available to a given program.
+-- See: `findPlugins`.
 data Plugins = Plugins
   { _pluginsPrefix :: !Text
-    -- ^ Common prefix of these plugins
   , _pluginsMap :: !(HashMap Text Plugin)
-    -- ^ Map from pluginName to Plugin
   }
   deriving (Show)
 
@@ -128,7 +128,7 @@ listPlugins :: Plugins -> [Plugin]
 listPlugins = HashMap.elems . _pluginsMap
 
 -- | A convenience wrapper around lookupPlugin and pluginProc.
--- Handles stdin/stdout/stderr are all inherited by the plugin.
+-- Handles stdin, stdout, and stderr are all inherited by the plugin.
 -- Throws PluginException.
 callPlugin :: (MonadIO m, MonadThrow m)
   => Plugins -> Text -> [String] -> m ()

@@ -28,7 +28,7 @@ import SimpleOptions
 
 -- | Runs a stackage plugin. Handy for dynamic one-off runs,
 -- but if you'll be running multiple plugins, it is recommended
--- that you use `findPlugins "stackage"` so that the plugin search
+-- that you use @findPlugins "stackage"@ so that the plugin search
 -- is performed only once.
 runStackagePlugin :: Text -> [String] -> IO ()
 runStackagePlugin name args = do
