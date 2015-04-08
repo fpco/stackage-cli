@@ -1,10 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 module Main where
 
 import           Control.Applicative
 import           Control.Exception (catch)
 import           Control.Monad
-import           Data.List
+import           Data.Maybe (isJust)
+import           Data.List as List
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -13,28 +15,27 @@ import           System.Environment
 import           System.IO (hPutStr, stderr)
 import           System.Exit
 
-onPluginErr :: StackagePluginException -> IO ()
-onPluginErr (StackagePluginUnavailable name) = do
+onPluginErr :: PluginException -> IO ()
+onPluginErr (PluginNotFound _ name) = do
   hPutStr stderr $ "Stackage plugin unavailable: " ++ T.unpack name
   exitFailure
-onPluginErr (StackagePluginExitFailure name i) = do
+onPluginErr (PluginExitFailure _ i) = do
   exitWith (ExitFailure i)
 
 
 main :: IO ()
-main =
-  do subcommands <-
-       fmap (map fst)
-            (getSubcommands stackageModule)
-     args <- fmap (map T.pack) getArgs
-     case dropWhile (T.isPrefixOf "-") args of
-       (name:args')
-         | elem name subcommands ->
-           runStackagePlugin name args' `catch` onPluginErr
-       _ ->
-         do desc <- subcommandsOf stackageModule
-            void (simpleOptions "0.1"
-                                "Run stackage commands"
-                                "Run stackage commands"
-                                (pure ())
-                                (Right desc))
+main = do
+  stackage <- findPlugins "stackage"
+  args <- getArgs
+  case dropWhile (List.isPrefixOf "-") args of
+    ((T.pack -> name):args')
+      | isJust (lookupPlugin stackage name) ->
+          callPlugin stackage name args' `catch` onPluginErr
+    _ -> do
+      simpleOptions
+        "0.1"
+        "Run stackage commands"
+        "Run stackage commands"
+        (pure ())
+        (commandsFromPlugins stackage)
+      return ()

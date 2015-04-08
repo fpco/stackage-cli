@@ -28,6 +28,9 @@ data Action
   | Upgrade (Maybe Snapshot)
   -- TODO: other commands
 
+mSnapshotToArgs :: Maybe Snapshot -> [String]
+mSnapshotToArgs = fmap T.unpack . maybeToList
+
 version :: String
 version = "0.1"
 
@@ -145,7 +148,7 @@ sandboxInit msnapshot = do
 
   cabalConfigExists <- isFile "cabal.config"
   when (not cabalConfigExists) $ do
-    runStackagePlugin "init" (maybeToList msnapshot)
+    runStackagePlugin "init" (mSnapshotToArgs msnapshot)
     -- TODO: catch plugin exceptions
 
   configSnapshot <- parseConfigSnapshot
@@ -244,7 +247,7 @@ downloadSnapshot mSnapshot = do
         setWorkingDirectory workingDir
         removeTree tempDir
   bracket_ enterTempDir exitTempDir $ do
-    runStackagePlugin "init" (maybeToList mSnapshot)
+    runStackagePlugin "init" (mSnapshotToArgs mSnapshot)
     parseConfigSnapshot
 
 

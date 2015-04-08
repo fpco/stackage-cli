@@ -1,8 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import Data.Text (Text, pack)
-
 import Control.Applicative
 import Stackage.CLI
 import System.Environment (getArgs)
@@ -10,8 +8,8 @@ import Data.Monoid
 import Options.Applicative (long, short, help, metavar, value, switch, Parser, strArgument)
 
 data Opts = Opts
-  { purgeArgs :: [Text]
-  , initArgs :: [Text]
+  { purgeArgs :: [String]
+  , initArgs :: [String]
   }
 
 
@@ -30,16 +28,16 @@ progDesc = summary
 optsParser :: Parser Opts
 optsParser = Opts <$> purgeArgsParser <*> initArgsParser
 
-initArgsParser :: Parser [Text]
+initArgsParser :: Parser [String]
 initArgsParser = targetToArgs  <$> initOptsParser where
-  targetToArgs t = [pack t]
+  targetToArgs t = [t]
 
 -- As seen in Init.hs
 initOptsParser :: Parser String
 initOptsParser = strArgument mods where
   mods = metavar "SNAPSHOT" <> value "lts"
 
-purgeArgsParser :: Parser [Text]
+purgeArgsParser :: Parser [String]
 purgeArgsParser = forceToArgs <$> purgeOptsParser where
   forceToArgs force = if force then ["--force"] else []
 
@@ -59,5 +57,6 @@ main = do
     optsParser   -- global parser
     (Left ())    -- subcommands
 
-  runStackagePlugin "purge" (purgeArgs opts)
-  runStackagePlugin "init" (initArgs opts)
+  stackage <- findPlugins "stackage"
+  callPlugin stackage "purge" (purgeArgs opts)
+  callPlugin stackage "init" (initArgs opts)
