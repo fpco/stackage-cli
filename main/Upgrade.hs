@@ -21,7 +21,7 @@ version :: String
 version = "0.1"
 
 summary :: String
-summary = "Upgrade stackage stuff"
+summary = "Upgrade your cabal.config file"
 
 header :: String
 header = summary

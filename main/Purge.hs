@@ -172,7 +172,7 @@ version :: String
 version = "0.1"
 
 header :: String
-header = "Purge stackage junk"
+header = "Delete cabal.config and purge your package database"
 
 progDesc :: String
 progDesc = header

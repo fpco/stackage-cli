@@ -109,7 +109,6 @@ cabalSandboxInit dir = do
   callProcess "cabal" args
 
 -- precondition: cabal.config exists
--- TODO: better errors?
 parseConfigSnapshot :: IO Snapshot
 parseConfigSnapshot = do
   ls <- T.lines <$> T.readFile "cabal.config"
@@ -140,7 +139,6 @@ sandboxVerify = do
     else do
       throwIO $ MissingConfig cabalConfigExists cabalSandboxConfigExists
 
--- TODO: handle errors gracefully
 getGhcVersion :: IO Text
 getGhcVersion = do
   output <- readProcess "ghc" ["--version"] ""
