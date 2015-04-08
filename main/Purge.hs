@@ -1,19 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Main where
 
 import Data.Maybe (listToMaybe, mapMaybe)
 import Stackage.CLI
 import Filesystem
+import Control.Exception (Exception, catch)
 import Control.Monad
+import Control.Monad.Catch (MonadThrow, throwM)
 import Control.Applicative
 import Data.Monoid
+import Data.Typeable (Typeable)
 import Options.Applicative (Parser, flag, long, help)
 import System.Process (readProcess)
 import Data.Char (toLower)
-import System.IO (stdout, hFlush)
+import System.IO (stdout, stderr, hFlush, hPutStrLn)
 import qualified Data.Text.Encoding as T
 import qualified Data.Text as T
 import System.Environment (getArgs)
+import System.Exit (exitFailure)
 
 import Text.Parsec hiding ((<|>), many)
 type ParsecParser = Parsec String ()
@@ -21,6 +26,16 @@ type ParsecParser = Parsec String ()
 data Force = Prompt | Force
 data PurgeOpts = PurgeOpts
   { purgeOptsForce :: Force }
+
+data PackageGroup = PackageGroup
+  { packageGroupDb :: String
+  , packageGroupPackages :: [String]
+  }
+
+data PurgeException
+  = ParsePackagesError ParseError
+  deriving (Show, Typeable)
+instance Exception PurgeException
 
 prompt :: String -> IO String
 prompt str = putStr str >> hFlush stdout >> getLine
@@ -70,15 +85,14 @@ getGlobalPackageDb = do
   return $ fmap init $ listToMaybe (lines output)
   -- fmap init is to get rid of the trailing colon
 
-                   -- db, packages
-type PackageGroup = (String, [String])
 getPackages :: Maybe String -> IO [PackageGroup]
-getPackages mPackageDb = parsePackages <$> readProcess "ghc-pkg" args "" where
+getPackages mPackageDb = parsePackages =<< readProcess "ghc-pkg" args "" where
   args = ["list"] <> dbToArgs mPackageDb
 
--- TODO: handle exceptions gracefully
-parsePackages :: String -> [PackageGroup]
-parsePackages = either (error . show) id . parse packagesParser ""
+parsePackages :: MonadThrow m => String -> m [PackageGroup]
+parsePackages
+  = either (throwM . ParsePackagesError) return
+  . parse packagesParser ""
 
 ending :: ParsecParser ()
 ending = eof <|> void endOfLine
@@ -87,7 +101,7 @@ packagesParser :: ParsecParser [PackageGroup]
 packagesParser = many1 parseGroup
 
 parseGroup :: ParsecParser PackageGroup
-parseGroup = (,) <$> parseDb <*> parseDbPackages <* many endOfLine
+parseGroup = PackageGroup <$> parseDb <*> parseDbPackages <* many endOfLine
 
 parseDb :: ParsecParser String
 parseDb = manyTill anyChar (char ':' *> ending)
@@ -119,7 +133,7 @@ purge opts = do
         | otherwise = s
 
   packages <- getPackages sandboxPackageDbMay
-  forM_ packages $ \(db, packages) -> do
+  forM_ packages $ \(PackageGroup db packages) -> do
     putStrLn $ displaySandbox db
     let nPackages = length packages
     let showNPackages
@@ -163,6 +177,12 @@ header = "Purge stackage junk"
 progDesc :: String
 progDesc = header
 
+handlePurgeExceptions :: PurgeException -> IO ()
+handlePurgeExceptions (ParsePackagesError _) = do
+  hPutStrLn stderr $ "Failed to parse ghc-pkg output"
+  exitFailure
+
+main :: IO ()
 main = do
   (opts, ()) <- simpleOptions
     version
@@ -170,4 +190,4 @@ main = do
     progDesc
     purgeOptsParser -- global parser
     (Left ())       -- subcommands
-  purge opts
+  purge opts `catch` handlePurgeExceptions
