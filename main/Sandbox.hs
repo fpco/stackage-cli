@@ -54,7 +54,7 @@ version :: String
 version = "0.1"
 
 header :: String
-header = "Initializes cabal.sandbox.config"
+header = "Manages shared stackage sandboxes"
 
 progDesc :: String
 progDesc = header
