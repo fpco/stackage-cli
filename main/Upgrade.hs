@@ -65,7 +65,7 @@ main = do
     header
     progDesc
     optsParser   -- global parser
-    (Left ())    -- subcommands
+    empty        -- subcommands
 
   stackage <- findPlugins "stackage"
   callPlugin stackage "purge" (purgeArgs opts)

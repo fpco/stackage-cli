@@ -189,5 +189,5 @@ main = do
     header
     progDesc
     purgeOptsParser -- global parser
-    (Left ())       -- subcommands
+    empty           -- subcommands
   purge opts `catch` handlePurgeExceptions

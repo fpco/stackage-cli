@@ -10,8 +10,8 @@ module Stackage.CLI
   , PluginException (..)
 
     -- * Creating your own plugin
-  , simpleCommand
   , simpleOptions
+  , addCommand
   , commandsFromPlugins
 
     -- * Finer-grained inspection of plugins

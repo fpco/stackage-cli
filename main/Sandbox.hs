@@ -83,14 +83,13 @@ deleteDesc = "Deletes cabal.config and cabal.sandbox.config. "
 upgradeDesc :: String
 upgradeDesc = "Upgrade to the given SNAPSHOT. Defaults to the latest LTS."
 
-subcommands = mconcat
-  [ simpleCommand "init" "Init" Init (optional snapshotParser)
-  , simpleCommand "package-db" packageDbDesc (const PackageDb) (pure ())
-  , simpleCommand "list" listDesc List (optional packageParser)
-  , simpleCommand "unregister" unregisterDesc Unregister packageParser
-  , simpleCommand "delete" deleteDesc Delete (optional snapshotParser)
-  , simpleCommand "upgrade" upgradeDesc Upgrade (optional snapshotParser)
-  ]
+subcommands = do
+  addCommand "init" "Init" Init (optional snapshotParser)
+  addCommand "package-db" packageDbDesc (const PackageDb) (pure ())
+  addCommand "list" listDesc List (optional packageParser)
+  addCommand "unregister" unregisterDesc Unregister packageParser
+  addCommand "delete" deleteDesc Delete (optional snapshotParser)
+  addCommand "upgrade" upgradeDesc Upgrade (optional snapshotParser)
 
 toText' :: Path.FilePath -> IO Text
 toText' p = case toText p of
@@ -380,7 +379,7 @@ main = do
     header
     progDesc
     (pure ())
-    (Right subcommands)
+    subcommands
   let go = case action of
         Init mSnapshot -> sandboxInit mSnapshot
         PackageDb -> printPackageDb

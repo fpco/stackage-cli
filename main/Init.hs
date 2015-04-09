@@ -100,5 +100,5 @@ main = do
     header
     progDesc
     snapshotParser -- global parser
-    (Left ())    -- subcommands
+    empty          -- subcommands
   initSnapshot snapshot `catch` handleInitExceptions snapshot
