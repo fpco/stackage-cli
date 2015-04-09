@@ -4,6 +4,7 @@
 module SimpleOptions
     ( simpleOptions
     , Options.addCommand
+    , Options.simpleVersion
     ) where
 
 import           Control.Applicative

@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
 import Data.Maybe (listToMaybe, mapMaybe)
@@ -19,6 +21,7 @@ import qualified Data.Text.Encoding as T
 import qualified Data.Text as T
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
+import qualified Paths_stackage_cli as CabalInfo
 
 import Text.Parsec hiding ((<|>), many)
 type ParsecParser = Parsec String ()
@@ -169,7 +172,7 @@ purgeOptsParser = PurgeOpts <$> forceOpt where
       <> help "Purge all packages without prompt"
 
 version :: String
-version = "0.1"
+version = $(simpleVersion CabalInfo.version)
 
 header :: String
 header = "Delete cabal.config and purge your package database"

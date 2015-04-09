@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
@@ -20,6 +21,7 @@ import System.Exit
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import System.Process (callProcess, readProcess)
+import qualified Paths_stackage_cli as CabalInfo
 
 type Snapshot = Text
 type Package = Text
@@ -51,7 +53,7 @@ mSnapshotToArgs :: Maybe Snapshot -> [String]
 mSnapshotToArgs = fmap T.unpack . maybeToList
 
 version :: String
-version = "0.1"
+version = $(simpleVersion CabalInfo.version)
 
 header :: String
 header = "Manages shared stackage sandboxes"

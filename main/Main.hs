@@ -1,5 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
 import           Control.Applicative
@@ -14,6 +16,7 @@ import           Stackage.CLI
 import           System.Environment
 import           System.IO (hPutStr, stderr)
 import           System.Exit
+import qualified Paths_stackage_cli as CabalInfo
 
 onPluginErr :: PluginException -> IO ()
 onPluginErr (PluginNotFound _ name) = do
@@ -22,6 +25,8 @@ onPluginErr (PluginNotFound _ name) = do
 onPluginErr (PluginExitFailure _ i) = do
   exitWith (ExitFailure i)
 
+version :: String
+version = $(simpleVersion CabalInfo.version)
 
 main :: IO ()
 main = do
@@ -33,7 +38,7 @@ main = do
           callPlugin stackage name args' `catch` onPluginErr
     _ -> do
       simpleOptions
-        "0.1"
+        version
         "Run stackage commands"
         "Run stackage commands"
         (pure ())

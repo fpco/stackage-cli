@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
@@ -22,6 +23,7 @@ import System.Exit (exitFailure)
 import System.Environment (getArgs)
 import System.IO (hPutStrLn, stderr)
 import Control.Exception
+import qualified Paths_stackage_cli as CabalInfo
 
 type Snapshot = String
 
@@ -34,7 +36,7 @@ data InitException
 instance Exception InitException
 
 version :: String
-version = "0.1"
+version = $(simpleVersion CabalInfo.version)
 
 header :: String
 header = "Initializes cabal.config"
