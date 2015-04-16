@@ -42,7 +42,7 @@ import Data.Typeable (Typeable)
 import Data.Monoid
 import System.Directory
 import System.Process (CreateProcess, proc, readProcess, readProcessWithExitCode, createProcess, waitForProcess)
-import System.FilePath ((</>))
+import System.FilePath ((</>), getSearchPath, splitExtension)
 import System.Environment (getEnv)
 import System.Exit (ExitCode (..))
 
@@ -159,12 +159,18 @@ executablesPrefixed prefix dir
  $= CL.filter (L.isPrefixOf prefix)
  $= clFilterM (fileExistsIn dir)
  $= clFilterM (isExecutableIn dir)
- $= CL.mapMaybe (L.stripPrefix prefix)
+ $= CL.mapMaybe (L.stripPrefix prefix . dropExeExt)
+
+-- | Drop the .exe extension if present
+dropExeExt :: FilePath -> FilePath
+dropExeExt fp
+    | y == ".exe" = x
+    | otherwise   = fp
+  where
+    (x, y) = splitExtension fp
 
 getPathDirs :: (MonadIO m) => Producer m FilePath
-getPathDirs = do
-  path <- liftIO $ getEnv "PATH"
-  CL.sourceList $ splitOn ":" path
+getPathDirs = liftIO getSearchPath >>= mapM_ yield
 
 pathToContents :: (MonadIO m) => FilePath -> Producer m FilePath
 pathToContents dir = do
