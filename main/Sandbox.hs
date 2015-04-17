@@ -177,7 +177,8 @@ getHome = T.pack <$> do
     Just home -> return home
     Nothing -> do
       mHomePath <- lookupEnv "HOMEPATH"
-      case mHomePath of
+      mHomeDrive <- lookupEnv "HOMEDRIVE"
+      case (++) <$> mHomeDrive <*> mHomePath of
         Just home -> return home
         Nothing -> throwIO NoHomeEnvironmentVariable
 
