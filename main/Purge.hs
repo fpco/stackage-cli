@@ -68,7 +68,7 @@ parsePackageDb = do
   cabalSandboxConfigExists <- isFile "cabal.sandbox.config"
   if cabalSandboxConfigExists
     then do
-      t <- T.decodeUtf8 <$> Filesystem.readFile "cabal.sandbox.config"
+      t <- Filesystem.readTextFile "cabal.sandbox.config"
       let packageDbLine = T.stripPrefix "package-db: "
       return $ fmap T.unpack $ listToMaybe $ mapMaybe packageDbLine $ T.lines t
     else
@@ -107,7 +107,7 @@ parseGroup :: ParsecParser PackageGroup
 parseGroup = PackageGroup <$> parseDb <*> parseDbPackages <* many endOfLine
 
 parseDb :: ParsecParser String
-parseDb = manyTill anyChar (char ':' *> ending)
+parseDb = manyTill anyChar $ try (char ':' *> ending)
 
 parseDbPackages :: ParsecParser [String]
 parseDbPackages = try parseNoPackages <|> many1 parsePackage
