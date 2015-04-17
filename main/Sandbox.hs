@@ -18,6 +18,7 @@ import Options.Applicative hiding (header, progDesc)
 import Stackage.CLI
 import System.Environment (lookupEnv)
 import System.Exit
+import System.FilePath (addTrailingPathSeparator)
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import System.Process (callProcess, readProcess)
@@ -305,14 +306,15 @@ sandboxUpgrade mSnapshot = do
 getSandboxPrefix :: IO Text
 getSandboxPrefix = do
   dirPath <- getSnapshotDirPrefix
-  toText' dirPath
+  dirPathText <- toText' dirPath
+  let viaString f = T.pack . f . T.unpack
+  return $ viaString addTrailingPathSeparator dirPathText
 
 oldSandboxNotice :: IO ()
 oldSandboxNotice = do
   db <- getPackageDb
   sandboxPrefix <- getSandboxPrefix
-  -- TODO: use FilePath functions to do this better
-  case T.stripPrefix (sandboxPrefix <> "/") db of
+  case T.stripPrefix sandboxPrefix db of
     Nothing -> do
       putStrLn "Notice: Your old sandbox remains intact:"
       T.putStrLn db
