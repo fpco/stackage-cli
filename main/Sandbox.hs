@@ -16,7 +16,7 @@ import Filesystem.Path.CurrentOS as Path
 import Filesystem
 import Options.Applicative hiding (header, progDesc)
 import Stackage.CLI
-import System.Environment (getEnv)
+import System.Environment (lookupEnv)
 import System.Exit
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
@@ -171,10 +171,15 @@ sandboxInit msnapshot = do
   sandboxVerify
 
 getHome :: IO Text
-getHome = T.pack <$> getEnv "HOME" `catch` dne where
-  dne e
-    | isDoesNotExistError e = throwIO NoHomeEnvironmentVariable
-    | otherwise = throwIO e
+getHome = T.pack <$> do
+  mHome <- lookupEnv "HOME"
+  case mHome of
+    Just home -> return home
+    Nothing -> do
+      mHomePath <- lookupEnv "HOMEPATH"
+      case mHomePath of
+        Just home -> return home
+        Nothing -> throwIO NoHomeEnvironmentVariable
 
 getSnapshotDirPrefix :: IO Path.FilePath
 getSnapshotDirPrefix = do
