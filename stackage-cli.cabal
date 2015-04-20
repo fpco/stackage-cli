@@ -1,5 +1,5 @@
 name:                stackage-cli
-version:             0.0.0.1
+version:             0.0.0.2
 synopsis:
   A CLI library for stackage commands
 description:
@@ -13,6 +13,10 @@ build-type:          Simple
 cabal-version:       >=1.10
 category: Development
 extra-source-files:  README.md ChangeLog.md
+
+source-repository head
+  type:     git
+  location: git://github.com/fpco/stackage-cli.git
 
 library
   hs-source-dirs: src/
