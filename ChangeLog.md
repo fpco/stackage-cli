@@ -1,4 +1,4 @@
-## 0.0.0.2
+## 0.0.0.3
 
 * Works with older versions of parsec [#28](https://github.com/fpco/stackage-cli/issues/28)
 

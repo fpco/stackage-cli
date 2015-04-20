@@ -1,5 +1,5 @@
 name:                stackage-cli
-version:             0.0.0.2
+version:             0.0.0.3
 synopsis:
   A CLI library for stackage commands
 description:
