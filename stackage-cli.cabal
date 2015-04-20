@@ -29,7 +29,7 @@ library
     , hashable
     , unordered-containers
     , exceptions
-    , optparse-simple
+    , optparse-simple >= 0.0.2
     , either
   default-language:    Haskell2010
 
