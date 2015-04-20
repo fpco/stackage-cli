@@ -1,0 +1,37 @@
+# Travis script based on https://github.com/hvr/multi-ghc-travis
+
+env:
+  - GHCVER=7.8.4
+  - GHCVER=7.10.1
+
+before_install:
+  # If $GHCVER is the one travis has, don't bother reinstalling it.
+  # We can also have faster builds by installing some libraries with
+  # `apt`. If it isn't, install the GHC we want from hvr's PPA along
+  # with cabal-1.18.
+  - |
+    if [ $GHCVER = `ghc --numeric-version` ]; then
+      # Try installing some of the build-deps with apt-get for speed.
+      travis/cabal-apt-install --enable-tests $MODE
+      export CABAL=cabal
+    else
+      # Install the GHC we want from hvr's PPA
+      travis_retry sudo add-apt-repository -y ppa:hvr/ghc
+      travis_retry sudo apt-get update
+      travis_retry sudo apt-get install cabal-install-1.18 ghc-$GHCVER happy
+      export CABAL=cabal-1.18
+      export PATH=/opt/ghc/$GHCVER/bin:$PATH
+    fi
+  # Download latest stackage nightly snapshot
+  - $CABAL update
+
+install:
+  - $CABAL install --dependencies-only
+  - $CABAL configure -flib-Werror
+
+script:
+  - $CABAL build
+  - $CABAL check
+  - $CABAL sdist
+  - SRC_TGZ=$(cabal info . | awk '{print $2;exit}').tar.gz &&
+   (cd dist && cabal install --force-reinstalls "$SRC_TGZ") 
