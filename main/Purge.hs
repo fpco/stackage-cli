@@ -100,6 +100,9 @@ parsePackages
 
 -- #28
 #if !MIN_VERSION_parsec(3,1,6)
+crlf :: ParsecParser Char
+crlf = char '\r' *> char '\n' <?> "crlf new-line"
+
 endOfLine :: ParsecParser Char
 endOfLine = newline <|> crlf <?> "new-line"
 #endif
