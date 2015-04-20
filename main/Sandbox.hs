@@ -318,7 +318,7 @@ oldSandboxNotice = do
     Nothing -> do
       putStrLn "Notice: Your old sandbox remains intact:"
       T.putStrLn db
-    Just db' -> case T.takeWhile (not . flip elem "/\\") db' of
+    Just db' -> case T.takeWhile (not . flip elem ("/\\" :: String)) db' of
       snapshot | not (T.null snapshot) -> do
         T.putStrLn $ "Notice: The " <> snapshot <> " shared sandbox remains intact."
         T.putStrLn $ "You may delete it from your system by calling:"
