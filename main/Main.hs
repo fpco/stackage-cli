@@ -14,13 +14,13 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Stackage.CLI
 import           System.Environment
-import           System.IO (hPutStr, stderr)
+import           System.IO (stderr)
 import           System.Exit
 import qualified Paths_stackage_cli as CabalInfo
 
 onPluginErr :: PluginException -> IO ()
 onPluginErr (PluginNotFound _ name) = do
-  hPutStr stderr $ "Stackage plugin unavailable: " ++ T.unpack name
+  T.hPutStr stderr $ "Stackage plugin unavailable: " `T.append` name
   exitFailure
 onPluginErr (PluginExitFailure _ i) = do
   exitWith (ExitFailure i)
