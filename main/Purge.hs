@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE CPP #-}
 
 module Main where
 
@@ -96,6 +97,12 @@ parsePackages :: MonadThrow m => String -> m [PackageGroup]
 parsePackages
   = either (throwM . ParsePackagesError) return
   . parse packagesParser ""
+
+-- #28
+#if !MIN_VERSION_parsec(3,1,6)
+endOfLine :: ParsecParser Char
+endOfLine = newline <|> crlf <?> "new-line"
+#endif
 
 ending :: ParsecParser ()
 ending = eof <|> void endOfLine
