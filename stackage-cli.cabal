@@ -2,11 +2,16 @@ name:                stackage-cli
 version:             0.1
 synopsis:
   A CLI library for stackage commands
+description:
+  A CLI library for stackage commands
+license:             MIT
+license-file:        LICENSE
 author:              Dan Burton
 maintainer:          danburton@fpcomplete.com
 copyright:           2015 FP Complete Corporation
 build-type:          Simple
 cabal-version:       >=1.10
+category: Development
 
 library
   hs-source-dirs: src/
