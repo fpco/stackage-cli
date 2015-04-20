@@ -7,6 +7,7 @@ module Main where
 import           Control.Applicative
 import           Control.Exception (catch)
 import           Control.Monad
+import           Data.Monoid ((<>))    
 import           Data.Maybe (isJust)
 import           Data.List as List
 import           Data.Text (Text)
@@ -20,7 +21,7 @@ import qualified Paths_stackage_cli as CabalInfo
 
 onPluginErr :: PluginException -> IO ()
 onPluginErr (PluginNotFound _ name) = do
-  T.hPutStr stderr $ "Stackage plugin unavailable: " `T.append` name
+  T.hPutStr stderr $ "Stackage plugin unavailable: " <> name
   exitFailure
 onPluginErr (PluginExitFailure _ i) = do
   exitWith (ExitFailure i)
