@@ -12,7 +12,7 @@ before_install:
   - |
     if [ $GHCVER = `ghc --numeric-version` ]; then
       # Try installing some of the build-deps with apt-get for speed.
-      travis/cabal-apt-install --enable-tests $MODE
+      travis/cabal-apt-install --enable-tests
       export CABAL=cabal
     else
       # Install the GHC we want from hvr's PPA
@@ -33,5 +33,13 @@ script:
   - $CABAL build
   - $CABAL check
   - $CABAL sdist
-  - SRC_TGZ=$(cabal info . | awk '{print $2;exit}').tar.gz &&
-   (cd dist && cabal install --force-reinstalls "$SRC_TGZ") 
+  # check that the generated source-distribution can be built & installed
+  - export SRC_TGZ=$($CABAL info . | awk '{print $2 ".tar.gz";exit}') ;
+    cd dist/;
+    if [ -f "$SRC_TGZ" ]; then
+       $CABAL install --force-reinstalls "$SRC_TGZ";
+    else
+       echo "expected '$SRC_TGZ' not found";
+       exit 1;
+    fi
+
