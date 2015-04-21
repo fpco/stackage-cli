@@ -20,6 +20,10 @@ cabal-version:       >=1.10
 category: Development
 extra-source-files:  README.md ChangeLog.md
 
+source-repository head
+  type:     git
+  location: git://github.com/fpco/stackage-cli.git
+
 library
   hs-source-dirs: src/
   exposed-modules:
