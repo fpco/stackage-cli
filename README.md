@@ -1,6 +1,8 @@
 stackage-cli
 ============
 
+[![Build Status](https://travis-ci.org/fpco/stackage-cli.svg)](https://travis-ci.org/fpco/stackage-cli)
+
 A command-line interface for leveraging stackage.
 
 You must have `ghc`, `ghc-pkg`, and `cabal` on your $PATH. This program will make various calls to those executables on your behalf.
