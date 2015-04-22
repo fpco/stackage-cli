@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Main where
 
@@ -13,10 +14,16 @@ import ClassyPrelude.Conduit hiding ((<>))
 import Control.Applicative
 import Crypto.Hash
 import Crypto.Hash.Conduit (sinkHash)
+import Data.Aeson (FromJSON(..), withObject, (.:))
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Char as Char
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.List as List
 import Data.Monoid
+import qualified Data.Text.Lazy as LText
+import qualified Data.Text.Lazy.Encoding as LText
+import qualified Data.Yaml as Yaml
 import Options.Applicative (Parser, strArgument, metavar, value)
 import Stackage.CLI
 import Network.HTTP.Client.Conduit
@@ -26,7 +33,6 @@ import qualified Filesystem.Path.CurrentOS as Path
 import System.Environment (lookupEnv)
 import System.Process (callProcess)
 import qualified Paths_stackage_cli as CabalInfo
-
 
 import Prelude (Bool(..))
 
@@ -44,16 +50,16 @@ userAgent = "stackage-setup"
 
 main :: IO ()
 main = do
-  (snapshot,()) <- simpleOptions
+  (target,()) <- simpleOptions
     version
     header
     progDesc
-    snapshotParser
+    setupTargetParser
     empty
   withManager
     $ withStackageHome
     $ curryReaderT R
-    $ setup snapshot
+    $ setup target
 
 data R = R
   { rStackageHome :: StackageHome
@@ -99,58 +105,142 @@ curryReaderT tup m =
   ReaderT $ \r2 ->
   runReaderT m $ tup r1 r2
 
+stackageHost :: String
+stackageHost = "http://localhost:3000"
 
-type Snapshot = String
+arch :: String
+arch = "linux64"
 
-snapshotParser :: Parser Snapshot
-snapshotParser = strArgument mods where
-  mods = metavar "SNAPSHOT" <> value "lts"
+ltsSnapshotsReq :: MonadThrow m => m Request
+ltsSnapshotsReq = parseUrl $ stackageHost <> "/download/lts-snapshots.json"
 
+ghcMajorVersionReq :: MonadThrow m => Snapshot -> m Request
+ghcMajorVersionReq snapshot = parseUrl $
+  stackageHost <> "/snapshot/" <> snapshot <> "/ghc-major-version"
 
-isSeries :: Snapshot -> Bool
-isSeries "lts" = True
-isSeries (stripPrefix "lts-" -> Just s) = all Char.isNumber s
-isSeries (stripPrefix "lts/" -> Just s) = all Char.isNumber s
-isSeries _ = False
+getLinksReq :: MonadThrow m => GhcMajorVersion -> m Request
+getLinksReq ghcMajorVersion = parseUrl $
+  stackageHost <> "/static/setup/" <> arch <> "/ghc-" <> ghcMajorVersion <> "-links.yaml"
 
+setupTargetParser :: Parser SetupTarget
+setupTargetParser = strArgument mods where
+  mods = metavar "TARGET" <> value "lts"
 
-
-refreshLtsSnapshots :: MonadIO m => m (HashMap String String)
+refreshLtsSnapshots ::
+  ( HasHttpManager env
+  , MonadReader env m
+  , GetStackageHome m
+  , MonadThrow m
+  , MonadIO m
+  ) => m (HashMap String String)
 refreshLtsSnapshots = do
-  -- TODO: unstub
-  return $ HashMap.fromList
-    [ ("lts", "lts-2.3")
-    , ("lts-2", "lts-2.3")
-    , ("lts-1", "lts-1.15")
-    ]
+  stackageHome <- getStackageHome
+  let path = Path.encodeString $ stackageHome </> ltsSnapshotsPath
 
-downloadSnapshotData :: MonadIO m => Snapshot -> m (HashMap Text Download)
-downloadSnapshotData "lts-2.3" = do
-  -- TODO: unstub
-  let ghc = Download
-        { downloadName = "ghc"
-        , downloadVersion = "7.8.4"
-        , downloadUrl = "http://www.haskell.org/ghc/dist/7.8.4/ghc-7.8.4-x86_64-unknown-linux-deb7.tar.xz"
-        , downloadSha1 = "11aec12d4bb27f6fa59dcc8535a7a3b3be8cb787"
-        }
-      cabal = Download
-        { downloadName = "cabal"
-        , downloadVersion = "1.20.0.3"
-        , downloadUrl = "http://www.haskell.org/cabal/release/cabal-install-1.20.0.3/cabal-1.20.0.3-i386-unknown-linux.tar.gz"
-        , downloadSha1 = "647ae3e561343a709b09ed70fa6bc7b1ce39e25b"
-        }
-  return $ HashMap.fromList
-    [ ("ghc", ghc)
-    , ("cabal", cabal)
-    ]
-downloadSnapshotData _ = error "downloadSnapshotData: stubbed out"
+  response <- httpLbs =<< ltsSnapshotsReq
+  let lbs = responseBody response
+  liftIO $ LByteString.writeFile path lbs
+
+  either (throwM . ParseLtsSnapshotsError) return $ Aeson.eitherDecode lbs
+
+
+getLinks ::
+  ( MonadIO m
+  , MonadThrow m
+  , MonadReader env m
+  , HasHttpManager env
+  ) => GhcMajorVersion -> m [Download]
+getLinks ghcMajorVersion = do
+  response <- httpLbs =<< getLinksReq ghcMajorVersion
+  let lbs = responseBody response
+      bs = LByteString.toStrict lbs
+  either (throwM . ParseLinksError) return $ Yaml.decodeEither' bs
 
 data Download = Download
   { downloadName :: Text
   , downloadVersion :: Text
   , downloadUrl :: String
   , downloadSha1 :: String
+  , downloadInstructions :: [Text]
   }
+
+instance FromJSON Download where
+  parseJSON = withObject "Download" $ \obj -> do
+    downloadName         <- obj .: "name"
+    downloadVersion      <- obj .: "version"
+    downloadUrl          <- obj .: "url"
+    downloadSha1         <- obj .: "sha1"
+    downloadInstructions <- obj .: "instructions"
+    return Download{..}
+
+type SetupTarget = String
+type GhcMajorVersion = String
+type Series = String
+type Snapshot = String
+
+data SetupExceptions
+  = SeriesNotFound Series
+  | ParseLtsSnapshotsError String
+  | ParseLinksError Yaml.ParseException
+  deriving (Show, Typeable)
+instance Exception SetupExceptions
+
+readSeries :: String -> Maybe Series
+readSeries s@"lts" = Just s
+readSeries s@(stripPrefix "lts-" -> Just sver)
+  | all Char.isNumber sver = Just s
+readSeries (stripPrefix "lts/" -> Just sver)
+  | all Char.isNumber sver = Just $ "lts-" <> sver
+readSeries _ = Nothing
+
+readGhcVersion :: String -> Maybe GhcMajorVersion
+readGhcVersion (stripPrefix "ghc-" -> Just s) = case break (== '.') s of
+  (m1, '.':m2) | all Char.isNumber m1 && all Char.isNumber m2
+    -> Just s
+  _ -> Nothing
+readGhcVersion _ = Nothing
+
+getGhcMajorVersion ::
+  ( HasHttpManager env
+  , MonadReader env m
+  , GetStackageHome m
+  , MonadThrow m
+  , MonadIO m
+  ) => String -> m GhcMajorVersion
+getGhcMajorVersion target = case readGhcVersion target of
+  Just version -> return version
+  Nothing -> do
+    snapshot <- case readSeries target of
+      Just series -> lookupSnapshot series
+      Nothing -> return target -- just try using it as a snapshot
+    putStrLn $ "setup for snapshot: " <> pack snapshot
+    lookupGhcMajorVersion snapshot
+
+lookupSnapshot ::
+  ( HasHttpManager env
+  , MonadReader env m
+  , GetStackageHome m
+  , MonadThrow m
+  , MonadIO m
+  ) => Series -> m Snapshot
+lookupSnapshot series = do
+  ltsSnapshots <- refreshLtsSnapshots
+  case HashMap.lookup series ltsSnapshots of
+    Just snapshot -> return snapshot
+    Nothing -> throwM $ SeriesNotFound series
+
+
+lookupGhcMajorVersion ::
+  ( HasHttpManager env
+  , MonadReader env m
+  , MonadThrow m
+  , MonadIO m
+  ) => Snapshot -> m GhcMajorVersion
+lookupGhcMajorVersion snapshot = do
+  response <- httpLbs =<< ghcMajorVersionReq snapshot
+  let lbs = responseBody response
+  return $ unpack $ LText.toStrict $ LText.decodeUtf8 lbs
+
 
 setup ::
   ( HasHttpManager env
@@ -159,18 +249,13 @@ setup ::
   , MonadThrow m
   , MonadIO m
   , MonadBaseControl IO m
-  ) => Snapshot -> m ()
-setup snapshot0 = do
-  snapshot <- if isSeries snapshot0
-    then do
-      ltsSnapshots <- refreshLtsSnapshots
-      case HashMap.lookup snapshot0 ltsSnapshots of
-        Just snapshot -> return snapshot
-        Nothing -> return snapshot0 -- TODO: error?
-    else return snapshot0
-  env <- downloadSnapshotData snapshot
+  ) => SetupTarget -> m ()
+setup target = do
+  ghcMajorVersion <- getGhcMajorVersion target
+  putStrLn $ "Selecting ghc-" <> pack ghcMajorVersion
+  links <- getLinks ghcMajorVersion
 
-  forM_ env $ \d@Download{..} -> do
+  forM_ links $ \d@Download{..} -> do
     stackageHome <- getStackageHome
 
     let dir = stackageHome </> downloadDir downloadName
@@ -189,12 +274,11 @@ setup snapshot0 = do
 postDownload :: (MonadIO m)
   => Download -> Path.FilePath -> Path.FilePath -> m ()
 postDownload Download{..} dir versionedDir = do
-  case downloadName of
-    "ghc" -> return () -- TODO: install
-    "cabal" -> liftIO $ do
-      createTree versionedDir
-      rename (dir </> "cabal") (versionedDir </> "cabal")
-    _ -> return () -- TODO: error?
+  mapM_ (runInstruction dir) downloadInstructions
+
+runInstruction :: MonadIO m => Path.FilePath -> Text -> m ()
+runInstruction dir = go where
+  go = putStrLn -- TODO: unstub
 
 -- TODO: use Text more than String
 
@@ -274,3 +358,6 @@ downloadDir name =
 downloadPath :: Text -> Text -> Path.FilePath
 downloadPath name version =
   Path.fromText (name <> "-" <> version)
+
+ltsSnapshotsPath :: Path.FilePath
+ltsSnapshotsPath = Path.fromText "lts-snapshots.json"

@@ -120,4 +120,7 @@ executable stackage-setup
     , cryptohash-conduit
     , http-types
     , process
+    , aeson
+    , yaml
+    , bytestring
   default-language:    Haskell2010
