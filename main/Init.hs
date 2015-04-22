@@ -16,6 +16,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.Typeable (Typeable)
 import Network.HTTP.Client
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types.Status (statusCode)
 import Network.HTTP.Types.Header (hUserAgent)
 import qualified Data.ByteString.Lazy as LBS
@@ -52,7 +53,7 @@ snapshotParser = strArgument mods where
   mods = (metavar "SNAPSHOT" <> value "lts")
 
 toUrl :: Snapshot -> String
-toUrl t = "http://stackage.org/" <> t <> "/cabal.config"
+toUrl t = "https://www.stackage.org/" <> t <> "/cabal.config"
 
 snapshotReq :: Snapshot -> IO Request
 snapshotReq snapshot = case parseUrl (toUrl snapshot) of
@@ -62,7 +63,7 @@ snapshotReq snapshot = case parseUrl (toUrl snapshot) of
     }
 
 downloadSnapshot :: Snapshot -> IO LBS.ByteString
-downloadSnapshot snapshot = withManager defaultManagerSettings $ \manager -> do
+downloadSnapshot snapshot = withManager tlsManagerSettings $ \manager -> do
   let getResponseLbs req = do
         response <- httpLbs req manager
         return $ responseBody response
