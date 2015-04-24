@@ -179,7 +179,7 @@ ghcMajorVersionReq snapshot = do
 getLinksReq :: (MonadThrow m, GetConfig m) => GhcMajorVersion -> m Request
 getLinksReq ghcMajorVersion = do
   stackageHost <- getStackageHost
-  parseUrl $ stackageHost <> "/static/setup/" <> arch <> "/ghc-" <> ghcMajorVersion <> "-links.yaml"
+  parseUrl $ stackageHost <> "/download/" <> arch <> "/ghc-" <> ghcMajorVersion <> "-links.yaml"
 
 setupTargetParser :: Parser SetupTarget
 setupTargetParser = strArgument mods where
