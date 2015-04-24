@@ -10,11 +10,12 @@
 
 module Main where
 
+import qualified ClassyPrelude.Conduit as ClassyPrelude
 import ClassyPrelude.Conduit hiding ((<>))
 import Control.Applicative
 import Crypto.Hash
 import Crypto.Hash.Conduit (sinkHash)
-import Data.Aeson (FromJSON(..), withObject, (.:))
+import Data.Aeson (FromJSON(..), withObject, (.:), (.:?), (.!=))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Char as Char
@@ -27,6 +28,7 @@ import qualified Data.Yaml as Yaml
 import Options.Applicative (Parser, strArgument, metavar, value)
 import Stackage.CLI
 import Network.HTTP.Client.Conduit
+import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types (hUserAgent)
 import Filesystem
 import qualified Filesystem.Path.CurrentOS as Path
@@ -48,6 +50,9 @@ progDesc = header
 userAgent :: ByteString
 userAgent = "stackage-setup"
 
+stackageHostDefault :: String
+stackageHostDefault = "https://www.stackage.org"
+
 main :: IO ()
 main = do
   (target,()) <- simpleOptions
@@ -56,48 +61,101 @@ main = do
     progDesc
     setupTargetParser
     empty
-  withManager
-    $ withStackageHome
+  withManagerSettings tlsManagerSettings
+    $ withConfig
     $ curryReaderT R
     $ setup target
 
 data R = R
-  { rStackageHome :: StackageHome
+  { rConfig :: Config
   , rManager :: Manager
   }
 
 instance HasHttpManager R where
   getHttpManager = rManager
 
-type StackageHome = Path.FilePath
+data Config = Config
+  { configStackageHome :: FilePath
+  , configStackageHost :: String
+  }
 
-class HasStackageHome env where
-  accessStackageHome :: env -> StackageHome
-instance HasStackageHome R where
-  accessStackageHome = rStackageHome
+data StackageConfig = StackageConfig
+  { _stackageHost :: String }
+
+instance FromJSON StackageConfig where
+  parseJSON = withObject "StackageConfig" $ \obj -> do
+    _stackageHost <- obj .:? "stackage-host" .!= stackageHostDefault
+    return StackageConfig{..}
+
+
+getStackageHome :: GetConfig m => m FilePath
+getStackageHome = liftM configStackageHome getConfig
+
+getStackageHost :: GetConfig m => m String
+getStackageHost = liftM configStackageHost getConfig
+
+class HasConfig env where
+  accessConfig :: env -> Config
+instance HasConfig R where
+  accessConfig = rConfig
 
 -- TODO: check environment properly
-getStackageHomeIO :: IO StackageHome
+getStackageHomeIO :: IO FilePath
 getStackageHomeIO = lookupEnv "STACKAGE_ROOT_DIR" >>= \case
   Just dir -> return $ Path.decodeString dir
   Nothing -> lookupEnv "HOME" >>= \case
     Just dir -> return $ Path.decodeString dir </> ".stackage"
     Nothing -> fail "Couldn't find stackage root dir"
 
-class GetStackageHome m where
-  getStackageHome :: m StackageHome
-instance GetStackageHome IO where
-  getStackageHome = getStackageHomeIO
-instance (HasStackageHome env, Monad m)
-  => GetStackageHome (ReaderT env m) where
-  getStackageHome = liftM accessStackageHome ask
+readFileMay :: FilePath -> IO (Maybe ByteString)
+readFileMay path = do
+  exists <- isFile path
+  if exists
+    then Just <$> ClassyPrelude.readFile path
+    else return Nothing
+
+getFirstJust :: [IO (Maybe a)] -> IO (Maybe a)
+getFirstJust [] = return Nothing
+getFirstJust (xIO:xsIO) = do
+  xMay <- xIO
+  case xMay of
+    Just{} -> return xMay
+    Nothing -> getFirstJust xsIO
+
+getStackageHostIO :: FilePath -> IO String
+getStackageHostIO stackageHome = do
+  bsMay <- getFirstJust
+    [ readFileMay (stackageHome </> "config")
+    , readFileMay (stackageHome </> "config.yaml")
+    , readFileMay (stackageHome </> "config.yml")
+    ]
+  case bsMay of
+    Nothing -> return stackageHostDefault
+    Just bs -> case Yaml.decodeEither' bs of
+      Left{} -> return stackageHostDefault
+      Right stackageConfig -> return (_stackageHost stackageConfig)
 
 
-withStackageHome :: (MonadIO m)
-  => ReaderT StackageHome m a -> m a
-withStackageHome m = do
-  stackageHome <- liftIO getStackageHomeIO
-  runReaderT m stackageHome
+getConfigIO :: IO Config
+getConfigIO = do
+  configStackageHome <- getStackageHomeIO
+  configStackageHost <- getStackageHostIO configStackageHome
+  return Config{..}
+
+class Monad m => GetConfig m where
+  getConfig :: m Config
+instance GetConfig IO where
+  getConfig = getConfigIO
+instance (HasConfig env, Monad m)
+  => GetConfig (ReaderT env m) where
+  getConfig = liftM accessConfig ask
+
+
+withConfig :: (MonadIO m)
+  => ReaderT Config m a -> m a
+withConfig m = do
+  config <- liftIO getConfigIO
+  runReaderT m config
 
 curryReaderT :: (r1 -> r2 -> env) -> ReaderT env m a -> ReaderT r1 (ReaderT r2 m) a
 curryReaderT tup m =
@@ -105,22 +163,23 @@ curryReaderT tup m =
   ReaderT $ \r2 ->
   runReaderT m $ tup r1 r2
 
-stackageHost :: String
-stackageHost = "http://localhost:3000"
-
 arch :: String
 arch = "linux64"
 
-ltsSnapshotsReq :: MonadThrow m => m Request
-ltsSnapshotsReq = parseUrl $ stackageHost <> "/download/lts-snapshots.json"
+ltsSnapshotsReq :: (MonadThrow m, GetConfig m) => m Request
+ltsSnapshotsReq = do
+  stackageHost <- getStackageHost
+  parseUrl $ stackageHost <> "/download/lts-snapshots.json"
 
-ghcMajorVersionReq :: MonadThrow m => Snapshot -> m Request
-ghcMajorVersionReq snapshot = parseUrl $
-  stackageHost <> "/snapshot/" <> snapshot <> "/ghc-major-version"
+ghcMajorVersionReq :: (MonadThrow m, GetConfig m) => Snapshot -> m Request
+ghcMajorVersionReq snapshot = do
+  stackageHost <- getStackageHost
+  parseUrl $ stackageHost <> "/snapshot/" <> snapshot <> "/ghc-major-version"
 
-getLinksReq :: MonadThrow m => GhcMajorVersion -> m Request
-getLinksReq ghcMajorVersion = parseUrl $
-  stackageHost <> "/static/setup/" <> arch <> "/ghc-" <> ghcMajorVersion <> "-links.yaml"
+getLinksReq :: (MonadThrow m, GetConfig m) => GhcMajorVersion -> m Request
+getLinksReq ghcMajorVersion = do
+  stackageHost <- getStackageHost
+  parseUrl $ stackageHost <> "/static/setup/" <> arch <> "/ghc-" <> ghcMajorVersion <> "-links.yaml"
 
 setupTargetParser :: Parser SetupTarget
 setupTargetParser = strArgument mods where
@@ -129,7 +188,7 @@ setupTargetParser = strArgument mods where
 refreshLtsSnapshots ::
   ( HasHttpManager env
   , MonadReader env m
-  , GetStackageHome m
+  , GetConfig m
   , MonadThrow m
   , MonadIO m
   ) => m (HashMap String String)
@@ -148,7 +207,7 @@ getLinks ::
   ( MonadIO m
   , MonadThrow m
   , MonadReader env m
-  , GetStackageHome m
+  , GetConfig m
   , HasHttpManager env
   ) => GhcMajorVersion -> m [Download]
 getLinks ghcMajorVersion = do
@@ -208,7 +267,7 @@ readGhcVersion _ = Nothing
 getGhcMajorVersion ::
   ( HasHttpManager env
   , MonadReader env m
-  , GetStackageHome m
+  , GetConfig m
   , MonadThrow m
   , MonadIO m
   ) => String -> m GhcMajorVersion
@@ -224,7 +283,7 @@ getGhcMajorVersion target = case readGhcVersion target of
 lookupSnapshot ::
   ( HasHttpManager env
   , MonadReader env m
-  , GetStackageHome m
+  , GetConfig m
   , MonadThrow m
   , MonadIO m
   ) => Series -> m Snapshot
@@ -238,6 +297,7 @@ lookupSnapshot series = do
 lookupGhcMajorVersion ::
   ( HasHttpManager env
   , MonadReader env m
+  , GetConfig m
   , MonadThrow m
   , MonadIO m
   ) => Snapshot -> m GhcMajorVersion
@@ -250,7 +310,7 @@ lookupGhcMajorVersion snapshot = do
 setup ::
   ( HasHttpManager env
   , MonadReader env m
-  , GetStackageHome m
+  , GetConfig m
   , MonadThrow m
   , MonadIO m
   , MonadBaseControl IO m

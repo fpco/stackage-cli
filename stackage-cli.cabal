@@ -114,6 +114,7 @@ executable stackage-setup
     , system-filepath
     , optparse-applicative
     , http-conduit
+    , http-client-tls
     , classy-prelude-conduit
     , unordered-containers
     , cryptohash
