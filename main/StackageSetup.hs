@@ -101,11 +101,14 @@ instance HasConfig R where
 
 -- TODO: check environment properly
 getStackageHomeIO :: IO FilePath
-getStackageHomeIO = lookupEnv "STACKAGE_ROOT_DIR" >>= \case
-  Just dir -> return $ Path.decodeString dir
-  Nothing -> lookupEnv "HOME" >>= \case
-    Just dir -> return $ Path.decodeString dir </> ".stackage"
-    Nothing -> fail "Couldn't find stackage root dir"
+getStackageHomeIO = do
+  stackageHome <- lookupEnv "STACKAGE_ROOT_DIR" >>= \case
+    Just dir -> return $ Path.decodeString dir
+    Nothing -> lookupEnv "HOME" >>= \case
+      Just dir -> return $ Path.decodeString dir </> ".stackage"
+      Nothing -> fail "Couldn't find stackage root dir"
+  createTree stackageHome
+  return stackageHome
 
 readFileMay :: FilePath -> IO (Maybe ByteString)
 readFileMay path = do
