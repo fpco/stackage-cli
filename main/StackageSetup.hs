@@ -366,7 +366,9 @@ postDownload d@Download{..} dir versionedDir = do
 expectInstructions :: (MonadIO m) => Text -> Download -> Path.FilePath -> Path.FilePath -> m ()
 expectInstructions "ghc" = expectGhcInstructions
 expectInstructions "cabal" = expectCabalInstructions
-expectInstructions "stackage" = expectStackageInstructions
+expectInstructions "stackage" = justUnpackInstructions
+expectInstructions "alex" = justUnpackInstructions
+expectInstructions "happy" = justUnpackInstructions
 expectInstructions t = unexpectedInstructions t
 
 unexpectedInstructions :: (MonadIO m) => Text -> Download -> FilePath -> FilePath -> m ()
@@ -377,8 +379,8 @@ unexpectedInstructions t Download{..} dir _ = do
     putStrLn $ "$ cd " <> fpToText dir
     mapM_ (putStrLn . ("$ " <>)) downloadInstructions
 
-expectStackageInstructions :: (MonadIO m) => Download -> FilePath -> FilePath -> m ()
-expectStackageInstructions Download{..} dir versionedDir =
+justUnpackInstructions :: (MonadIO m) => Download -> FilePath -> FilePath -> m ()
+justUnpackInstructions Download{..} dir _ = do
     liftIO $ go downloadInstructions
   where
     go :: [Text] -> IO ()
@@ -386,10 +388,11 @@ expectStackageInstructions Download{..} dir versionedDir =
     go ( (stripPrefix "tar xJf " -> Just file)
        : next
        ) = unzipXZ dir (Path.fromText file) >> go next
-    go ( (stripPrefix "rm stackage-" -> Just _file)
+    go ( (stripPrefix "rm " -> Just _file)
        : next
        ) = go next -- already done in unzipXZ
     go (t:_) = fail $ "command not recognized: " <> unpack t
+
 
 expectGhcInstructions :: (MonadIO m) => Download -> Path.FilePath -> Path.FilePath -> m ()
 expectGhcInstructions Download{..} dir versionedDir =
