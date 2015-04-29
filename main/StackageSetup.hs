@@ -53,6 +53,7 @@ userAgent = "stackage-setup"
 stackageHostDefault :: String
 stackageHostDefault = "https://www.stackage.org"
 
+
 main :: IO ()
 main = do
   (target,()) <- simpleOptions
@@ -75,7 +76,7 @@ instance HasHttpManager R where
   getHttpManager = rManager
 
 data Config = Config
-  { configStackageHome :: FilePath
+  { configStackageRoot :: FilePath
   , configStackageHost :: String
   }
 
@@ -88,8 +89,8 @@ instance FromJSON StackageConfig where
     return StackageConfig{..}
 
 
-getStackageHome :: GetConfig m => m FilePath
-getStackageHome = liftM configStackageHome getConfig
+getStackageRoot :: GetConfig m => m FilePath
+getStackageRoot = liftM configStackageRoot getConfig
 
 getStackageHost :: GetConfig m => m String
 getStackageHost = liftM configStackageHost getConfig
@@ -100,15 +101,18 @@ instance HasConfig R where
   accessConfig = rConfig
 
 -- TODO: check environment properly
-getStackageHomeIO :: IO FilePath
-getStackageHomeIO = do
-  stackageHome <- lookupEnv "STACKAGE_ROOT_DIR" >>= \case
+getStackageRootIO :: IO FilePath
+getStackageRootIO = do
+  stackageRoot <- lookupEnv "STACKAGE_ROOT" >>= \case
     Just dir -> return $ Path.decodeString dir
-    Nothing -> lookupEnv "HOME" >>= \case
-      Just dir -> return $ Path.decodeString dir </> ".stackage"
-      Nothing -> fail "Couldn't find stackage root dir"
-  createTree stackageHome
-  return stackageHome
+    Nothing -> do
+      -- TODO: windows-ify
+      home <- lookupEnv "HOME" >>= \case
+        Just homeStr -> return (fromString homeStr)
+        Nothing -> throwIO StackageRootNotFound
+      return (home </> ".stackage")
+  createTree stackageRoot
+  return stackageRoot
 
 readFileMay :: FilePath -> IO (Maybe ByteString)
 readFileMay path = do
@@ -126,11 +130,11 @@ getFirstJust (xIO:xsIO) = do
     Nothing -> getFirstJust xsIO
 
 getStackageHostIO :: FilePath -> IO String
-getStackageHostIO stackageHome = do
+getStackageHostIO stackageRoot = do
   bsMay <- getFirstJust
-    [ readFileMay (stackageHome </> "config")
-    , readFileMay (stackageHome </> "config.yaml")
-    , readFileMay (stackageHome </> "config.yml")
+    [ readFileMay (stackageRoot </> "config")
+    , readFileMay (stackageRoot </> "config.yaml")
+    , readFileMay (stackageRoot </> "config.yml")
     ]
   case bsMay of
     Nothing -> return stackageHostDefault
@@ -141,8 +145,8 @@ getStackageHostIO stackageHome = do
 
 getConfigIO :: IO Config
 getConfigIO = do
-  configStackageHome <- getStackageHomeIO
-  configStackageHost <- getStackageHostIO configStackageHome
+  configStackageRoot <- getStackageRootIO
+  configStackageHost <- getStackageHostIO configStackageRoot
   return Config{..}
 
 class Monad m => GetConfig m where
@@ -196,8 +200,8 @@ refreshLtsSnapshots ::
   , MonadIO m
   ) => m (HashMap String String)
 refreshLtsSnapshots = do
-  stackageHome <- getStackageHome
-  let path = Path.encodeString $ stackageHome </> ltsSnapshotsPath
+  stackageRoot <- getStackageRoot
+  let path = Path.encodeString $ stackageRoot </> ltsSnapshotsPath
 
   response <- httpLbs =<< ltsSnapshotsReq
   let lbs = responseBody response
@@ -214,11 +218,11 @@ getLinks ::
   , HasHttpManager env
   ) => GhcMajorVersion -> m [Download]
 getLinks ghcMajorVersion = do
-  stackageHome <- getStackageHome
+  stackageRoot <- getStackageRoot
   response <- httpLbs =<< getLinksReq ghcMajorVersion
   let lbs = responseBody response
       bs = LByteString.toStrict lbs
-      path = Path.encodeString $ stackageHome </> linksPath ghcMajorVersion
+      path = Path.encodeString $ stackageRoot </> linksPath ghcMajorVersion
   liftIO $ LByteString.writeFile path lbs
 
   either (throwM . ParseLinksError) return $ Yaml.decodeEither' bs
@@ -249,6 +253,7 @@ data SetupExceptions
   = SeriesNotFound Series
   | ParseLtsSnapshotsError String
   | ParseLinksError Yaml.ParseException
+  | StackageRootNotFound
   deriving (Show, Typeable)
 instance Exception SetupExceptions
 
@@ -280,7 +285,7 @@ getGhcMajorVersion target = case readGhcVersion target of
     snapshot <- case readSeries target of
       Just series -> lookupSnapshot series
       Nothing -> return target -- just try using it as a snapshot
-    putStrLn $ "setup for snapshot: " <> pack snapshot
+    putStrLn $ "Setup for snapshot: " <> pack snapshot
     lookupGhcMajorVersion snapshot
 
 lookupSnapshot ::
@@ -324,9 +329,9 @@ setup target = do
   links <- getLinks ghcMajorVersion
 
   forM_ links $ \d@Download{..} -> do
-    stackageHome <- getStackageHome
+    stackageRoot <- getStackageRoot
 
-    let dir = stackageHome </> downloadDir downloadName
+    let dir = stackageRoot </> downloadDir downloadName
     liftIO $ createTree dir
 
     let versionedDir = dir </> downloadPath downloadName downloadVersion
@@ -454,7 +459,7 @@ download url sha1 dir = do
   let fname = List.drop (List.last slashes + 1) url
       slashes = List.findIndices (== '/') url
       file = dir </> Path.decodeString fname
-  putStrLn $ "downloading: " <> pack fname
+  putStrLn $ "Downloading: " <> pack fname
   req0 <- parseUrl url
   let req = req0
         { requestHeaders = [(hUserAgent, userAgent)] }
@@ -465,7 +470,7 @@ download url sha1 dir = do
     hash <- source $$ sink
     let _ = hash :: Digest SHA1
     when (show hash /= sha1) $ do
-      fail "corrupted download"
+      fail "Corrupted download"
     putStrLn $ "Verified sha1: " <> pack sha1
 
 -- TODO: make cross platform
