@@ -124,4 +124,5 @@ executable stackage-setup
     , aeson
     , yaml
     , bytestring
+    , filepath
   default-language:    Haskell2010

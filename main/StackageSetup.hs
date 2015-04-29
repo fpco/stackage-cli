@@ -32,10 +32,12 @@ import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types (hUserAgent)
 import Filesystem
 import qualified Filesystem.Path.CurrentOS as Path
-import System.Environment (lookupEnv)
+import System.FilePath (searchPathSeparator, getSearchPath)
+import System.Environment (lookupEnv, getEnv, setEnv)
 import System.Process (callProcess)
 import qualified Paths_stackage_cli as CabalInfo
 
+import qualified Prelude
 import Prelude (Bool(..))
 
 version :: String
@@ -342,6 +344,18 @@ setup target = do
         download downloadUrl downloadSha1 dir
         postDownload d dir versionedDir
       else putStrLn $ "Already have: " <> downloadName <> "-" <> downloadVersion
+
+    augmentPath (versionedDir </> "bin")
+
+
+
+-- TODO: ensure this works cross-platform
+augmentPath :: MonadIO m => FilePath -> m ()
+augmentPath pathHead = liftIO $ do
+  pathRest <- getSearchPath
+  let paths = fpToString pathHead : pathRest
+      path = intercalate [searchPathSeparator] paths
+  setEnv "PATH" path
 
 
 postDownload :: (MonadIO m)
