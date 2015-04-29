@@ -366,7 +366,15 @@ postDownload d@Download{..} dir versionedDir = do
 expectInstructions :: (MonadIO m) => Text -> Download -> Path.FilePath -> Path.FilePath -> m ()
 expectInstructions "ghc" = expectGhcInstructions
 expectInstructions "cabal" = expectCabalInstructions
-expectInstructions t = fail $ "Unexpected download" <> unpack t
+expectInstructions t = unexpectedInstructions t
+
+unexpectedInstructions :: (MonadIO m) => Text -> Download -> FilePath -> FilePath -> m ()
+unexpectedInstructions t Download{..} dir _ = do
+  putStrLn $ "Unexpected download: " <> t
+  when (not $ null downloadInstructions) $ do
+    putStrLn $ "Manual instructions:"
+    putStrLn $ "$ cd " <> fpToText dir
+    mapM_ (putStrLn . ("$ " <>)) downloadInstructions
 
 expectGhcInstructions :: (MonadIO m) => Download -> Path.FilePath -> Path.FilePath -> m ()
 expectGhcInstructions Download{..} dir versionedDir =
