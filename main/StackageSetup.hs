@@ -34,7 +34,8 @@ import Filesystem
 import qualified Filesystem.Path.CurrentOS as Path
 import System.FilePath (searchPathSeparator, getSearchPath)
 import System.Environment (lookupEnv, getEnv, setEnv)
-import System.Process (callProcess)
+import System.Exit (exitFailure)
+import System.Process (callProcess, readProcess)
 import qualified Paths_stackage_cli as CabalInfo
 
 import qualified Prelude
@@ -89,6 +90,35 @@ instance FromJSON StackageConfig where
   parseJSON = withObject "StackageConfig" $ \obj -> do
     _stackageHost <- obj .:? "stackage-host" .!= stackageHostDefault
     return StackageConfig{..}
+
+-- Check if given processes appear to be present.
+-- Halts the program with exit failure if any are missing.
+-- TODO: make cross platform
+checkDependencies :: [String] -> IO ()
+checkDependencies deps = do
+  missing <- mapM checkIsMissing deps
+  when (or missing) $ do
+    hPutStrLn stderr $ asText $
+      "Please install missing dependencies and try again."
+    exitFailure
+
+-- return True if it appears to be missing
+checkIsMissing :: String -> IO Bool
+checkIsMissing process = do
+  isMissing <- procIsMissing process
+    `catch` \(e :: IOException) -> return True
+  if isMissing
+    then do
+      hPutStrLn stderr $
+        "Couldn't find required dependency: " <> process
+      return True
+    else return False
+
+-- return True if it appears to be missing
+procIsMissing :: String -> IO Bool
+procIsMissing process = do
+  output <- readProcess process ["--version"] ""
+  return $ null output
 
 
 getStackageRoot :: GetConfig m => m FilePath
@@ -330,9 +360,8 @@ setup target = do
   putStrLn $ "Selecting ghc-" <> pack ghcMajorVersion
   links <- getLinks ghcMajorVersion
 
+  stackageRoot <- getStackageRoot
   forM_ links $ \d@Download{..} -> do
-    stackageRoot <- getStackageRoot
-
     let dir = stackageRoot </> downloadDir downloadName
     liftIO $ createTree dir
 
@@ -341,13 +370,22 @@ setup target = do
 
     if (not exists)
       then do
+        liftIO $ checkDependencies (depsFor downloadName)
         download downloadUrl downloadSha1 dir
         postDownload d dir versionedDir
       else putStrLn $ "Already have: " <> downloadName <> "-" <> downloadVersion
 
     augmentPath (versionedDir </> "bin")
 
-
+-- The dependencies required for stackage-setup's implementation of
+-- the instructions for a given download item.
+depsFor :: Text -> [String]
+depsFor "ghc"      = ["make", "tar", "xz"]
+depsFor "cabal"    = ["tar", "gzip"]
+depsFor "stackage" = ["tar", "xz"]
+depsFor "alex"     = ["tar", "xz"]
+depsFor "happy"    = ["tar", "xz"]
+depsFor _          = []
 
 -- TODO: ensure this works cross-platform
 augmentPath :: MonadIO m => FilePath -> m ()
