@@ -120,3 +120,27 @@ executable stackage-sandbox
     , process
     , filepath
   default-language:    Haskell2010
+
+executable stackage-setup
+  hs-source-dirs:      main
+  main-is:             StackageSetup.hs
+  build-depends:
+      base >=4.7 && <5
+    , text
+    , stackage-cli
+    , system-fileio
+    , system-filepath
+    , optparse-applicative
+    , http-conduit
+    , http-client-tls
+    , classy-prelude-conduit
+    , unordered-containers
+    , cryptohash
+    , cryptohash-conduit
+    , http-types
+    , process
+    , aeson
+    , yaml
+    , bytestring
+    , filepath
+  default-language:    Haskell2010
