@@ -461,10 +461,18 @@ inDir dir action = do
       exit = setWorkingDirectory workingDir
   bracket_ enter exit action
 
+
 ghcConfigureInstall :: (MonadIO m) => Path.FilePath -> m ()
-ghcConfigureInstall versionedDir = liftIO $ inDir versionedDir $ do
-  callProcess "./configure" ["--prefix=" <> Path.encodeString versionedDir]
-  callProcess "make" ["install"]
+ghcConfigureInstall versionedDir = liftIO $ do
+  let srcDir = versionedDir <.> "src"
+  whenM (isDirectory srcDir) $ removeTree srcDir -- TODO: reuse instead
+  rename versionedDir srcDir
+  createTree versionedDir
+  let go = inDir srcDir $ do
+        callProcess "./configure" ["--prefix=" <> Path.encodeString versionedDir]
+        callProcess "make" ["install"]
+  go `onException` removeTree versionedDir
+  removeTree srcDir
 
 expectCabalInstructions :: (MonadIO m) => Download -> Path.FilePath -> Path.FilePath -> m ()
 expectCabalInstructions Download{..} dir versionedDir =
