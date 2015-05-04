@@ -1,3 +1,7 @@
+## 0.1.0
+
+* Split off stackage-cabal and stackage-sandbox
+
 ## 0.0.0.4
 
 * stackage-init now uses https [#34](https://github.com/fpco/stackage-cli/pull/34)
