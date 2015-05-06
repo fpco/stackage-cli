@@ -1,5 +1,5 @@
 name:                stackage-cli
-version:             0.1.0.1
+version:             0.1.0.2
 synopsis:
   A CLI library for stackage commands
 description:
@@ -15,7 +15,7 @@ author:              Dan Burton
 maintainer:          danburton@fpcomplete.com
 copyright:           2015 FP Complete Corporation
 
-build-type:          Simple
+build-type:          Custom
 cabal-version:       >=1.10
 category: Development
 extra-source-files:  README.md ChangeLog.md
